@@ -92,6 +92,8 @@ def extract_fields(records: List[Dict[str, Any]], fields: Dict) -> List[Dict[str
                 "phone": get_phone(record, fields["phone_fields"]),
                 "latitude": record.get(fields["latitude"]),
                 "longitude": record.get(fields["longitude"]),
+                "district": record.get(fields["district"]),
+                "taluk": record.get(fields["taluk"]),
                 "status": record.get(fields["status"]),
                 "id": record.get(fields["id"]),
             }
@@ -102,7 +104,18 @@ def extract_fields(records: List[Dict[str, Any]], fields: Dict) -> List[Dict[str
 
 def get_phone(record, phone_fields):
     """
-    Return first available phone number based on priority.
+    Extract first valid phone number based on priority fields.
+
+    Parameters
+    ----------
+    record : dict
+        Greenhouse record.
+    phone_fields : list
+        Ordered list of phone field names.
+
+    Returns
+    -------
+    str or None
     """
     for field in phone_fields:
         value = record.get(field)

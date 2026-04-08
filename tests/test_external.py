@@ -1,9 +1,16 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
+from app.external import zoho_client
 from app.external.maps_client import geocode_address
-from app.external.zoho_client import extract_records, fetch_all_greenhouse_data
+from app.external.weather_client import fetch_weather_raw
+from app.external.zoho_client import (
+    extract_records,
+    fetch_all_greenhouse_data,
+    refresh_access_token,
+)
 
 # ------------------ MAPS CLIENT ------------------
 
@@ -36,10 +43,6 @@ def test_geocode_address_failure(mock_get):
 @patch("app.external.maps_client.get_google_maps_api_key", return_value="fake-key")
 @patch("app.external.maps_client.requests.get")
 def test_geocode_address_request_exception(mock_get, mock_key):
-    import pytest
-    import requests
-
-    from app.external.maps_client import geocode_address
 
     mock_get.side_effect = requests.exceptions.RequestException("network error")
 
@@ -60,7 +63,6 @@ class DummyResponse:
 
 
 def test_get_valid_access_token_cached(monkeypatch):
-    from app.external import zoho_client
 
     zoho_client._access_token = "cached"
     zoho_client._expiry_time = 9999999999  # future
@@ -75,7 +77,6 @@ def test_get_valid_access_token_cached(monkeypatch):
 @patch("app.external.zoho_client.get_zoho_refresh_token", return_value="refresh")
 @patch("app.external.zoho_client.requests.post")
 def test_refresh_access_token(mock_post, mock_refresh, mock_secret, mock_id):
-    from app.external.zoho_client import refresh_access_token
 
     mock_post.return_value.json.return_value = {
         "access_token": "new_token",
@@ -136,3 +137,60 @@ def test_fetch_all_greenhouse_data_empty_response(mock_sync, mock_token, mock_ge
     result = fetch_all_greenhouse_data(connection=None)
 
     assert result == []
+
+
+# ------------------ WEATHER CLIENT ------------------
+
+
+def test_fetch_weather_success():
+
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"current": {"temp_c": 30}}
+    mock_response.raise_for_status.return_value = None
+
+    with patch(
+        "app.external.weather_client.requests.get", return_value=mock_response
+    ), patch("app.external.weather_client.get_weather_api_key", return_value="key"):
+
+        result = fetch_weather_raw(1, 2)
+
+        assert "current" in result
+
+
+def test_fetch_weather_request_failure():
+
+    with patch(
+        "app.external.weather_client.requests.get",
+        side_effect=requests.exceptions.RequestException,
+    ), patch("app.external.weather_client.get_weather_api_key", return_value="key"):
+
+        with pytest.raises(RuntimeError):
+            fetch_weather_raw(1, 2)
+
+
+def test_fetch_weather_invalid_json():
+
+    mock_response = MagicMock()
+    mock_response.raise_for_status.return_value = None
+    mock_response.json.side_effect = ValueError()
+
+    with patch(
+        "app.external.weather_client.requests.get", return_value=mock_response
+    ), patch("app.external.weather_client.get_weather_api_key", return_value="key"):
+
+        with pytest.raises(RuntimeError):
+            fetch_weather_raw(1, 2)
+
+
+def test_fetch_weather_missing_current():
+
+    mock_response = MagicMock()
+    mock_response.raise_for_status.return_value = None
+    mock_response.json.return_value = {}
+
+    with patch(
+        "app.external.weather_client.requests.get", return_value=mock_response
+    ), patch("app.external.weather_client.get_weather_api_key", return_value="key"):
+
+        with pytest.raises(RuntimeError):
+            fetch_weather_raw(1, 2)

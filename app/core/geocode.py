@@ -1,7 +1,4 @@
-from typing import Dict, Optional
-
-
-def build_address(record: Dict) -> Optional[str]:
+def build_address(record: dict) -> str | None:
     """
     Construct a normalized address string from greenhouse record fields.
 

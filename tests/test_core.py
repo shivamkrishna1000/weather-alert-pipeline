@@ -2,6 +2,8 @@ from app.constants import ALLOWED_STATUSES, ZOHO_FIELDS
 from app.core.geocode import build_address
 from app.core.greenhouse import extract_fields, filter_greenhouses
 
+# ------------------ GREENHOUSE ------------------
+
 
 def test_filter_greenhouses_valid_records():
     records = [
@@ -62,6 +64,9 @@ def test_phone_fallback_priority():
     result = extract_fields(records, ZOHO_FIELDS)
 
     assert result[0]["phone"] == "888"
+
+
+# ------------------ GEOCODE ------------------
 
 
 def test_build_address_basic():

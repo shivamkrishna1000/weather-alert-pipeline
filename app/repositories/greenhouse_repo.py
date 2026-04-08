@@ -6,7 +6,7 @@ from app.constants import ZOHO_FIELDS
 from app.core.greenhouse import get_phone
 
 
-def insert_greenhouses(connection, records):
+def insert_greenhouses(connection, records: list[dict]) -> None:
     """
     Insert or update greenhouse records in the database.
 
@@ -26,14 +26,16 @@ def insert_greenhouses(connection, records):
     for r in records:
         cursor.execute(
             """
-            INSERT INTO greenhouses (id, name, farmer_name, phone, latitude, longitude, status, geocoded)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO greenhouses (id, name, farmer_name, phone, latitude, longitude, district, taluk, status, geocoded)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT(id) DO UPDATE SET
                 name=excluded.name,
                 farmer_name=excluded.farmer_name,
                 phone=excluded.phone,
                 latitude=excluded.latitude,
                 longitude=excluded.longitude,
+                district=excluded.district,
+                taluk=excluded.taluk,
                 status=excluded.status,
                 geocoded=excluded.geocoded
             """,
@@ -44,6 +46,8 @@ def insert_greenhouses(connection, records):
                 r.get("phone"),
                 r.get("latitude"),
                 r.get("longitude"),
+                r.get("district"),
+                r.get("taluk"),
                 r.get("status"),
                 False,
             ),
@@ -53,7 +57,7 @@ def insert_greenhouses(connection, records):
     cursor.close()
 
 
-def insert_missing_location(connection, records):
+def insert_missing_location(connection, records: list[dict]) -> None:
     """
     Insert or update records missing location data.
 
@@ -108,7 +112,7 @@ def insert_missing_location(connection, records):
     cursor.close()
 
 
-def get_existing_ids(connection):
+def get_existing_ids(connection) -> set:
     """
     Fetch all existing greenhouse IDs from database.
 
@@ -132,7 +136,7 @@ def get_existing_ids(connection):
     return {row[0] for row in rows}
 
 
-def get_last_sync_time(connection):
+def get_last_sync_time(connection) -> str | None:
     """
     Retrieve last synchronization timestamp.
 
@@ -156,7 +160,7 @@ def get_last_sync_time(connection):
     return row[0] if row else None
 
 
-def get_from_cache(connection, address: str):
+def get_from_cache(connection, address: str) -> tuple[float, float] | None:
     """
     Fetch cached geocode result for an address.
 
@@ -188,7 +192,9 @@ def get_from_cache(connection, address: str):
     return None
 
 
-def insert_into_cache(connection, address: str, latitude: float, longitude: float):
+def insert_into_cache(
+    connection, address: str, latitude: float, longitude: float
+) -> None:
     """
     Store geocode result in cache.
 
@@ -224,7 +230,7 @@ def insert_into_cache(connection, address: str, latitude: float, longitude: floa
     cursor.close()
 
 
-def fetch_missing_batch(connection, limit: int = 100):
+def fetch_missing_batch(connection, limit: int = 100) -> list[dict]:
     """
     Fetch batch of records missing location data.
 
@@ -260,7 +266,7 @@ def fetch_missing_batch(connection, limit: int = 100):
     return records
 
 
-def increment_attempt(connection, record_id):
+def increment_attempt(connection, record_id: str) -> None:
     """
     Increment retry attempt count for a record.
 
@@ -290,7 +296,15 @@ def increment_attempt(connection, record_id):
     cursor.close()
 
 
-def delete_greenhouse(connection, greenhouse_id: str):
+def delete_greenhouse(connection, greenhouse_id: str) -> None:
+    """
+    Delete greenhouse record from both main and missing tables.
+
+    Parameters
+    ----------
+    greenhouse_id : str
+        Unique greenhouse identifier.
+    """
     cursor = connection.cursor()
 
     cursor.execute(

@@ -1,12 +1,10 @@
-from typing import Any, Dict, List, Tuple
-
 from app.constants import ALLOWED_STATUSES, ZOHO_FIELDS
 from app.core.greenhouse import extract_fields, filter_greenhouses, split_records
 
 
 def process_greenhouse_records(
-    records: List[Dict[str, Any]],
-) -> Tuple[List[Dict], List[Dict]]:
+    records: list[dict[str, object]],
+) -> tuple[list[dict], list[dict]]:
     """
     Process raw Zoho greenhouse records into cleaned datasets.
 
@@ -44,7 +42,9 @@ def process_greenhouse_records(
     return cleaned, without_loc
 
 
-def filter_records_without_location(records, allowed_statuses, fields):
+def filter_records_without_location(
+    records: list[dict], allowed_statuses: set, fields: dict
+) -> list[dict]:
     """
     Filter greenhouse records without location based on allowed statuses.
 

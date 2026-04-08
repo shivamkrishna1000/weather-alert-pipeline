@@ -80,6 +80,6 @@ def run_sync_pipeline(connection):
 
         print("Sync pipeline completed.")
 
-    except Exception as e:
+    except (RuntimeError, ValueError) as e:
         print(f"Sync pipeline failed: {e}")
         raise

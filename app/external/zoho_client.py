@@ -8,7 +8,6 @@ This module handles:
 
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List
 
 import requests
 
@@ -27,7 +26,12 @@ _access_token = None
 _expiry_time = 0
 
 
-def get_valid_access_token():
+def get_valid_access_token() -> str:
+    """
+    Retrieve a valid Zoho access token.
+
+    Returns cached token if not expired, otherwise refreshes it.
+    """
     global _access_token, _expiry_time
 
     if _access_token and time.time() < _expiry_time:
@@ -36,7 +40,20 @@ def get_valid_access_token():
     return refresh_access_token()
 
 
-def refresh_access_token():
+def refresh_access_token() -> str:
+    """
+    Refresh Zoho OAuth access token using refresh token.
+
+    Returns
+    -------
+    str
+        New access token.
+
+    Raises
+    ------
+    requests.exceptions.RequestException
+        If token request fails.
+    """
     global _access_token, _expiry_time
 
     url = f"{get_zoho_accounts_url()}/oauth/v2/token"
@@ -48,8 +65,11 @@ def refresh_access_token():
         "grant_type": "refresh_token",
     }
 
-    response = requests.post(url, params=params, timeout=10)
-    response.raise_for_status()
+    try:
+        response = requests.post(url, params=params, timeout=10)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError("Zoho token refresh failed") from e
 
     data = response.json()
 
@@ -80,7 +100,7 @@ def to_rfc1123(iso_time: str) -> str:
     return dt.astimezone(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
 
 
-def fetch_all_greenhouse_data(connection, per_page: int = 200) -> List[Dict[str, Any]]:
+def fetch_all_greenhouse_data(connection, per_page: int = 200) -> list[dict]:
     """
     Fetch greenhouse records from Zoho CRM using pagination.
 
@@ -113,7 +133,7 @@ def fetch_all_greenhouse_data(connection, per_page: int = 200) -> List[Dict[str,
     if last_sync:
         headers["If-Modified-Since"] = to_rfc1123(last_sync)
 
-    all_records: List[Dict[str, Any]] = []
+    all_records: list[dict] = []
     page = 1
     latest_modified_time = None
 
@@ -144,7 +164,9 @@ def fetch_all_greenhouse_data(connection, per_page: int = 200) -> List[Dict[str,
     return all_records
 
 
-def fetch_page(base_url, module, headers, page, per_page):
+def fetch_page(
+    base_url: str, module: str, headers: dict, page: int, per_page: int
+) -> requests.Response:
     """
     Fetch a single page of greenhouse records from Zoho CRM.
 
@@ -190,7 +212,7 @@ def fetch_page(base_url, module, headers, page, per_page):
     return response
 
 
-def extract_records(response):
+def extract_records(response: requests.Response) -> list[dict]:
     """
     Extract greenhouse records from Zoho API response.
 

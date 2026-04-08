@@ -1,11 +1,9 @@
-from typing import Tuple
-
 import requests
 
 from app.config import get_google_maps_api_key
 
 
-def geocode_address(address: str) -> Tuple[float, float]:
+def geocode_address(address: str) -> tuple[float, float]:
     """
     Fetch geographic coordinates for a given address using Google Maps API.
 

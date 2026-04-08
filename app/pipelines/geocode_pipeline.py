@@ -10,7 +10,7 @@ from app.repositories.greenhouse_repo import (
 from app.services.geocode_service import prepare_address, should_retry
 
 
-def insert_geocoded_record(connection, record, lat, lon):
+def insert_geocoded_record(connection, record: dict, lat: float, lon: float) -> None:
     """
     Insert or update a geocoded greenhouse record in the database.
 
@@ -56,7 +56,7 @@ def insert_geocoded_record(connection, record, lat, lon):
     cursor.close()
 
 
-def delete_from_missing(connection, record_id):
+def delete_from_missing(connection, record_id: str) -> None:
     """
     Remove a record from the missing location table.
 
@@ -82,7 +82,7 @@ def delete_from_missing(connection, record_id):
     cursor.close()
 
 
-def run_geocode_pipeline(connection, batch_size: int = 100):
+def run_geocode_pipeline(connection, batch_size: int = 100) -> None:
     """
     Execute geocoding pipeline for records missing location data.
 
@@ -117,17 +117,22 @@ def run_geocode_pipeline(connection, batch_size: int = 100):
         print(f"Processing batch of {len(records)} records...")
 
         for record in records:
-            processed = process_record(connection, record)
+            try:
+                processed = process_record(connection, record)
 
-            if processed:
-                total_processed += 1
+                if processed:
+                    total_processed += 1
 
-            time.sleep(0.05)
+                time.sleep(0.05)
+
+            except RuntimeError as e:
+                print(f"Critical failure for record {record.get('id')}: {e}")
+                raise
 
     print(f"Total processed: {total_processed}")
 
 
-def handle_failed_geocode(connection, record_id):
+def handle_failed_geocode(connection, record_id: str) -> None:
     """
     Handle a failed geocoding attempt for a record.
 
@@ -148,7 +153,9 @@ def handle_failed_geocode(connection, record_id):
     increment_attempt(connection, record_id)
 
 
-def get_coordinates(connection, address, record_id):
+def get_coordinates(
+    connection, address: str, record_id: str
+) -> tuple[float, float] | None:
     """
     Resolve geographic coordinates using cache or external API.
 
@@ -184,14 +191,14 @@ def get_coordinates(connection, address, record_id):
     except ValueError:
         print(f"Geocode failed (invalid address): {record_id}")
         handle_failed_geocode(connection, record_id)
-        return None
+        raise
 
     except RuntimeError as e:
         print(f"API error: {e}")
-        return None
+        raise
 
 
-def process_record(connection, record):
+def process_record(connection, record: dict) -> bool:
     """
     Process a single greenhouse record through the geocoding workflow.
 
@@ -234,12 +241,12 @@ def process_record(connection, record):
 
         return True
 
-    except Exception as e:
+    except (ValueError, RuntimeError) as e:
         print(f"Error processing record {record.get('id')}: {e}")
         return False
 
 
-def persist_geocoded_result(connection, record, lat, lon):
+def persist_geocoded_result(connection, record: dict, lat: float, lon: float) -> None:
     """
     Persist geocoded coordinates and remove record from pending queue.
 

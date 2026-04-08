@@ -73,3 +73,11 @@ def get_test_database_url() -> str:
     if not url:
         raise ValueError("TEST_DATABASE_URL is not set")
     return url
+
+
+def get_weather_api_key() -> str:
+    """Return Weather API key."""
+    key = os.environ.get("WEATHER_API_KEY")
+    if not key:
+        raise ValueError("WEATHER_API_KEY is not set")
+    return key
