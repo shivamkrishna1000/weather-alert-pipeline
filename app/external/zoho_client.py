@@ -20,6 +20,7 @@ from app.config import (
     get_zoho_refresh_token,
 )
 from app.repositories.greenhouse_repo import get_last_sync_time
+from app.constants import ZOHO_FIELDS
 
 # In-memory cache
 _access_token = None
@@ -82,161 +83,192 @@ def refresh_access_token() -> str:
     return _access_token
 
 
-def to_rfc1123(iso_time: str) -> str:
+def build_select_fields() -> str:
     """
-    Convert ISO datetime string to RFC1123 format required by Zoho API.
+    Build COQL SELECT clause from ZOHO_FIELDS.
 
-    Parameters
-    ----------
-    iso_time : str
-        ISO formatted datetime string.
+    Flattens field mappings, including nested lists, and ensures
+    required system fields are included.
 
     Returns
     -------
     str
-        RFC1123 formatted datetime string.
+        Comma-separated field names for COQL SELECT clause.
     """
-    dt = datetime.fromisoformat(iso_time)
-    return dt.astimezone(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+    fields = []
+
+    for value in ZOHO_FIELDS.values():
+        if isinstance(value, list):
+            fields.extend(value)
+        else:
+            fields.append(value)
+
+    fields.append("Modified_Time")
+
+    # Remove duplicates
+    return ", ".join(set(fields))
 
 
-def fetch_all_greenhouse_data(connection, per_page: int = 200) -> list[dict]:
+def build_coql_query(module: str, where_clause: str, select_clause: str, limit: int, offset: int) -> str:
     """
-    Fetch greenhouse records from Zoho CRM using pagination.
+    Construct COQL query string.
+
+    Parameters
+    ----------
+    module : str
+        Zoho module API name.
+    where_clause : str
+        Query filter conditions.
+    select_clause : str
+        Comma-separated fields to retrieve.
+    limit : int
+        Number of records per request.
+    offset : int
+        Pagination offset.
+
+    Returns
+    -------
+    str
+        COQL query string.
+    """
+    return f"""
+        select {select_clause}
+        from {module}
+        where {where_clause}
+        order by id asc
+        limit {limit} offset {offset}
+    """
+
+
+def execute_coql_query(base_url: str, headers: dict, query: str, offset: int) -> dict:
+    """
+    Execute COQL query.
+
+    Parameters
+    ----------
+    base_url : str
+        Zoho API base URL.
+    headers : dict
+        Request headers including authorization.
+    query : str
+        COQL query string.
+    offset : int
+        Pagination offset for error context.
+
+    Returns
+    -------
+    dict
+        JSON response from COQL API.
+
+    Raises
+    ------
+    RuntimeError
+        If request fails or response is invalid.
+    """
+    payload = {"select_query": query}
+
+    try:
+        response = requests.post(
+            f"{base_url}/crm/v8/coql",
+            headers=headers,
+            json=payload,
+            timeout=10,
+        )
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"COQL API request failed at offset {offset}") from e
+
+    # Handle 204 No Content (valid case)
+    if response.status_code == 204:
+        return {"data": [], "info": {"more_records": False}}
+    
+    # Handle empty response body (unexpected case)
+    if not response.text.strip():
+        raise RuntimeError(
+            f"Empty response from COQL API at offset {offset}. "
+            f"Status: {response.status_code}"
+        )
+    
+    try:
+        return response.json()
+    except ValueError:
+        raise RuntimeError(
+            f"Invalid JSON from COQL API.\n"
+            f"Status: {response.status_code}\n"
+            f"Response: {response.text[:500]}"
+        )
+
+
+def fetch_all_greenhouse_data(connection) -> list[dict]:
+    """
+    Fetch greenhouse records from Zoho CRM using COQL.
+
+    Retrieves records with pagination, applies Modified_Time filter,
+    and aggregates results into a single list.
 
     Parameters
     ----------
     connection : Any
         Database connection used to fetch last sync time.
-    per_page : int, optional
-        Number of records per page (default is 200).
 
     Returns
     -------
-    List[Dict[str, Any]]
-        List of greenhouse records retrieved from Zoho API.
-
-    Raises
-    ------
-    requests.exceptions.RequestException
-        If API request fails.
-    """
-    base_url = get_zoho_api_base()
-    module = get_zoho_module()
-    token = get_valid_access_token()
-    last_sync = get_last_sync_time(connection)
-    print(f"Using last_sync: {last_sync}")
-
-    headers = {
-        "Authorization": f"Zoho-oauthtoken {token}",
-    }
-    if last_sync:
-        headers["If-Modified-Since"] = to_rfc1123(last_sync)
-
-    all_records: list[dict] = []
-    page = 1
-    latest_modified_time = None
-
-    while True:
-        response = fetch_page(base_url, module, headers, page, per_page)
-        data = extract_records(response)
-
-        for record in data:
-            mod_time = record.get("Modified_Time")
-
-            if mod_time:
-                if not latest_modified_time or mod_time > latest_modified_time:
-                    latest_modified_time = mod_time
-
-        print(f"Page {page} fetched: {len(data)} records")
-
-        if not data:
-            break
-
-        all_records.extend(data)
-        if len(data) < per_page:
-            print(f"Last page reached at page {page}")
-            break
-        page += 1
-
-    print(f"Total records fetched: {len(all_records)}")
-
-    return all_records
-
-
-def fetch_page(
-    base_url: str, module: str, headers: dict, page: int, per_page: int
-) -> requests.Response:
-    """
-    Fetch a single page of greenhouse records from Zoho CRM.
-
-    Parameters
-    ----------
-    base_url : str
-        Base URL for Zoho API.
-    module : str
-        Zoho module name.
-    headers : Dict
-        HTTP headers including authorization.
-    page : int
-        Page number to fetch.
-    per_page : int
-        Number of records per page.
-
-    Returns
-    -------
-    requests.Response
-        HTTP response object from Zoho API.
-
-    Raises
-    ------
-    RuntimeError
-        If API request fails.
-    """
-    params = {
-        "per_page": per_page,
-        "page": page,
-    }
-
-    try:
-        response = requests.get(
-            f"{base_url}/crm/v2/{module}",
-            headers=headers,
-            params=params,
-            timeout=10,
-        )
-        response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        raise RuntimeError(f"Zoho API request failed on page {page}") from e
-
-    return response
-
-
-def extract_records(response: requests.Response) -> list[dict]:
-    """
-    Extract greenhouse records from Zoho API response.
-
-    Parameters
-    ----------
-    response : requests.Response
-        Response object returned from Zoho API.
-
-    Returns
-    -------
-    List[Dict[str, Any]]
+    list[dict]
         List of greenhouse records.
 
     Raises
     ------
     RuntimeError
-        If response contains invalid JSON.
+        If COQL API request fails.
     """
-    if not response.text.strip():
-        return []
+    base_url = get_zoho_api_base()
+    module = get_zoho_module()
+    token = get_valid_access_token()
+    last_sync = get_last_sync_time(connection)
 
-    try:
-        json_data = response.json()
-    except ValueError as e:
-        raise RuntimeError("Invalid JSON from Zoho API") from e
+    print(f"Using last_sync: {last_sync}")
 
-    return json_data.get("data", [])
+    headers = {
+        "Authorization": f"Zoho-oauthtoken {token}",
+        "Content-Type": "application/json",
+    }
+
+    where_clause = "id is not null"
+    if last_sync:
+        dt = datetime.fromisoformat(last_sync)
+        formatted_time = dt.strftime("%Y-%m-%dT%H:%M:%S%z")
+        formatted_time = formatted_time[:-2] + ":" + formatted_time[-2:]
+        
+        where_clause += f" and Modified_Time >= '{formatted_time}'"
+
+    select_clause = build_select_fields()
+
+    all_records = []
+    offset = 0
+    limit = 2000
+
+    while True:
+        query = build_coql_query(module, where_clause, select_clause, limit, offset)
+
+        print("COQL Query:", query)
+
+        json_data = execute_coql_query(base_url, headers, query, offset)
+
+        data = json_data.get("data", [])
+
+        print(f"Offset {offset}: fetched {len(data)} records")
+
+        if not data:
+            break
+
+        all_records.extend(data)
+
+        if not json_data.get("info", {}).get("more_records"):
+            print("No more records.")
+            break
+
+        offset += limit
+
+    print(f"Total records fetched: {len(all_records)}")
+
+    return all_records
