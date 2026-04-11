@@ -6,10 +6,7 @@ import requests
 from app.external import zoho_client
 from app.external.maps_client import geocode_address
 from app.external.weather_client import fetch_weather_raw
-from app.external.zoho_client import (
-    fetch_all_greenhouse_data,
-    refresh_access_token,
-)
+from app.external.zoho_client import fetch_all_greenhouse_data, refresh_access_token
 
 # ------------------ MAPS CLIENT ------------------
 

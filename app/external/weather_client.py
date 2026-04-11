@@ -1,4 +1,5 @@
 import requests
+
 from app.config import get_weather_api_key
 
 
@@ -26,10 +27,7 @@ def fetch_weather_raw(latitude: float, longitude: float) -> dict:
 
     url = "https://api.weatherapi.com/v1/current.json"
 
-    params = {
-        "key": api_key,
-        "q": f"{latitude},{longitude}"
-    }
+    params = {"key": api_key, "q": f"{latitude},{longitude}"}
 
     try:
         response = requests.get(url, params=params, timeout=10)

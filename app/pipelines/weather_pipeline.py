@@ -1,9 +1,9 @@
 from app.repositories.weather_repo import (
     fetch_clusters,
     get_cached_weather,
+    insert_weather_history,
     is_cache_fresh,
     upsert_weather_cache,
-    insert_weather_history,
 )
 from app.services.weather_service import get_weather
 
@@ -40,16 +40,10 @@ def run_weather_pipeline(connection):
         try:
             print(f"Fetching weather: {cluster_key}")
 
-            weather = get_weather(
-                cluster["latitude"],
-                cluster["longitude"]
-            )
+            weather = get_weather(cluster["latitude"], cluster["longitude"])
 
             # merge cluster + weather
-            enriched_cluster = {
-                **cluster,
-                **weather
-            }
+            enriched_cluster = {**cluster, **weather}
 
             # Step 2: Update cache
             upsert_weather_cache(connection, enriched_cluster)

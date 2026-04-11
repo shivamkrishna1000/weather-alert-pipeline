@@ -7,7 +7,7 @@ This module handles:
 """
 
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 
 import requests
 
@@ -19,8 +19,8 @@ from app.config import (
     get_zoho_module,
     get_zoho_refresh_token,
 )
-from app.repositories.greenhouse_repo import get_last_sync_time
 from app.constants import ZOHO_FIELDS
+from app.repositories.greenhouse_repo import get_last_sync_time
 
 # In-memory cache
 _access_token = None
@@ -109,7 +109,9 @@ def build_select_fields() -> str:
     return ", ".join(set(fields))
 
 
-def build_coql_query(module: str, where_clause: str, select_clause: str, limit: int, offset: int) -> str:
+def build_coql_query(
+    module: str, where_clause: str, select_clause: str, limit: int, offset: int
+) -> str:
     """
     Construct COQL query string.
 
@@ -181,14 +183,14 @@ def execute_coql_query(base_url: str, headers: dict, query: str, offset: int) ->
     # Handle 204 No Content (valid case)
     if response.status_code == 204:
         return {"data": [], "info": {"more_records": False}}
-    
+
     # Handle empty response body (unexpected case)
     if not response.text.strip():
         raise RuntimeError(
             f"Empty response from COQL API at offset {offset}. "
             f"Status: {response.status_code}"
         )
-    
+
     try:
         return response.json()
     except ValueError:
@@ -238,7 +240,7 @@ def fetch_all_greenhouse_data(connection) -> list[dict]:
         dt = datetime.fromisoformat(last_sync)
         formatted_time = dt.strftime("%Y-%m-%dT%H:%M:%S%z")
         formatted_time = formatted_time[:-2] + ":" + formatted_time[-2:]
-        
+
         where_clause += f" and Modified_Time >= '{formatted_time}'"
 
     select_clause = build_select_fields()

@@ -1,7 +1,9 @@
 """
 Database module for storing weather data.
 """
-from datetime import datetime, timedelta, UTC
+
+from datetime import UTC, datetime, timedelta
+
 
 # -------- CLUSTER FUNCTIONS --------
 def clean_name(name: str) -> str:
@@ -39,7 +41,7 @@ def fetch_clusters(connection) -> list[dict]:
 
     cursor.execute(
         """
-        SELECT 
+        SELECT
             district,
             taluk,
             AVG(latitude) as latitude,
@@ -66,13 +68,15 @@ def fetch_clusters(connection) -> list[dict]:
 
         cluster_key = f"{clean_district}_{clean_taluk}"
 
-        clusters.append({
-            "cluster_key": cluster_key,
-            "district": clean_district,
-            "taluk": clean_taluk,
-            "latitude": lat,
-            "longitude": lon
-        })
+        clusters.append(
+            {
+                "cluster_key": cluster_key,
+                "district": clean_district,
+                "taluk": clean_taluk,
+                "latitude": lat,
+                "longitude": lon,
+            }
+        )
 
     return clusters
 
@@ -137,7 +141,7 @@ def is_cache_fresh(fetched_at, ttl_hours: int = 6) -> bool:
     """
     if fetched_at.tzinfo is None:
         fetched_at = fetched_at.replace(tzinfo=UTC)
-        
+
     return datetime.now(UTC) - fetched_at < timedelta(hours=ttl_hours)
 
 
