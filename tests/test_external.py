@@ -7,7 +7,6 @@ from app.external import zoho_client
 from app.external.maps_client import geocode_address
 from app.external.weather_client import fetch_weather_raw
 from app.external.zoho_client import (
-    extract_records,
     fetch_all_greenhouse_data,
     refresh_access_token,
 )
@@ -89,50 +88,43 @@ def test_refresh_access_token(mock_post, mock_refresh, mock_secret, mock_id):
     assert token == "new_token"
 
 
-def test_extract_records_success():
-    response = DummyResponse({"data": [1, 2]})
-
-    result = extract_records(response)
-
-    assert result == [1, 2]
-
-
-def test_extract_records_empty():
-    response = DummyResponse({})
-
-    result = extract_records(response)
-
-    assert result == []
-
-
-@patch("app.external.zoho_client.fetch_page")
+@patch("app.external.zoho_client.requests.post")
 @patch("app.external.zoho_client.get_valid_access_token", return_value="token")
 @patch("app.external.zoho_client.get_last_sync_time", return_value=None)
-def test_fetch_all_greenhouse_data_multiple_pages(mock_sync, mock_token, mock_fetch):
+def test_fetch_all_greenhouse_data_multiple_pages(mock_sync, mock_token, mock_post):
 
     response1 = MagicMock()
+    response1.status_code = 200
     response1.text = "x"
-    response1.json.return_value = {"data": [{"id": "1"}]}
+    response1.json.return_value = {
+        "data": [{"id": "1"}],
+        "info": {"more_records": True},
+    }
 
     response2 = MagicMock()
+    response2.status_code = 200
     response2.text = "x"
-    response2.json.return_value = {"data": []}
+    response2.json.return_value = {
+        "data": [],
+        "info": {"more_records": False},
+    }
 
-    mock_fetch.side_effect = [response1, response2]
+    mock_post.side_effect = [response1, response2]
 
     result = fetch_all_greenhouse_data(connection=None)
 
     assert len(result) == 1
 
 
-@patch("app.external.zoho_client.requests.get")
+@patch("app.external.zoho_client.requests.post")
 @patch("app.external.zoho_client.get_valid_access_token", return_value="fake-token")
 @patch("app.external.zoho_client.get_last_sync_time", return_value=None)
-def test_fetch_all_greenhouse_data_empty_response(mock_sync, mock_token, mock_get):
+def test_fetch_all_greenhouse_data_empty_response(mock_sync, mock_token, mock_post):
     response = MagicMock()
+    response.status_code = 204
     response.text = ""
 
-    mock_get.return_value = response
+    mock_post.return_value = response
 
     result = fetch_all_greenhouse_data(connection=None)
 
