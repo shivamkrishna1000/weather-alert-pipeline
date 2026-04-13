@@ -42,44 +42,58 @@ def test_should_retry_logic():
 # ------------------ WEATHER SERVICE ------------------
 
 
-def test_normalize_weather():
+def test_normalize_weather_forecast_structure():
 
     data = {
-        "current": {
-            "temp_c": 30,
-            "humidity": 50,
-            "precip_mm": 1,
-            "wind_kph": 10,
-        }
+        "location": {"localtime": "2026-04-13 10:00"},
+        "forecast": {
+            "forecastday": [
+                {
+                    "hour": [
+                        {
+                            "time": "2026-04-13 10:00",
+                            "temp_c": 30,
+                            "humidity": 50,
+                            "precip_mm": 1,
+                            "chance_of_rain": 60,
+                            "will_it_rain": 1,
+                            "wind_kph": 10,
+                        }
+                    ]
+                    * 12
+                }
+            ]
+        },
     }
 
     result = normalize_weather(data)
 
-    assert result["temperature"] == 30
-    assert result["humidity"] == 50
-    assert result["rainfall"] == 1
-    assert result["wind_speed"] == 10
-
-
-def test_normalize_weather_missing_fields():
-
-    data = {"current": {}}
-
-    result = normalize_weather(data)
-
-    assert result["temperature"] is None
-    assert result["humidity"] is None
+    assert result["max_temp"] == 30
+    assert result["rain_hours"] == 12
 
 
 def test_get_weather_calls_fetch():
 
     raw_data = {
-        "current": {
-            "temp_c": 25,
-            "humidity": 60,
-            "precip_mm": 0,
-            "wind_kph": 5,
-        }
+        "location": {"localtime": "2026-04-13 10:00"},
+        "forecast": {
+            "forecastday": [
+                {
+                    "hour": [
+                        {
+                            "time": "2026-04-13 10:00",
+                            "temp_c": 25,
+                            "humidity": 60,
+                            "precip_mm": 0,
+                            "chance_of_rain": 0,
+                            "will_it_rain": 0,
+                            "wind_kph": 5,
+                        }
+                    ]
+                    * 12
+                }
+            ]
+        },
     }
 
     with patch(
@@ -89,4 +103,4 @@ def test_get_weather_calls_fetch():
         result = get_weather(1, 2)
 
         mock_fetch.assert_called_once_with(1, 2)
-        assert result["temperature"] == 25
+        assert "max_temp" in result

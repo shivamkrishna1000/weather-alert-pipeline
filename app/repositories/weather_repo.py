@@ -100,7 +100,11 @@ def get_cached_weather(connection, cluster_key: str) -> dict | None:
 
     cursor.execute(
         """
-        SELECT temperature, rainfall, humidity, wind_speed, fetched_at
+        SELECT
+            max_temp, min_temp, max_rain,
+            rain_probability, rain_hours,
+            max_humidity, max_wind,
+            fetched_at
         FROM weather_cache
         WHERE cluster_key = %s
         """,
@@ -113,13 +117,25 @@ def get_cached_weather(connection, cluster_key: str) -> dict | None:
     if not row:
         return None
 
-    temperature, rainfall, humidity, wind_speed, fetched_at = row
+    (
+        max_temp,
+        min_temp,
+        max_rain,
+        rain_probability,
+        rain_hours,
+        max_humidity,
+        max_wind,
+        fetched_at,
+    ) = row
 
     return {
-        "temperature": temperature,
-        "rainfall": rainfall,
-        "humidity": humidity,
-        "wind_speed": wind_speed,
+        "max_temp": max_temp,
+        "min_temp": min_temp,
+        "max_rain": max_rain,
+        "rain_probability": rain_probability,
+        "rain_hours": rain_hours,
+        "max_humidity": max_humidity,
+        "max_wind": max_wind,
         "fetched_at": fetched_at,
     }
 
@@ -161,24 +177,35 @@ def upsert_weather_cache(connection, cluster: dict) -> None:
         """
         INSERT INTO weather_cache (
             cluster_key, latitude, longitude,
-            temperature, rainfall, humidity, wind_speed, fetched_at
+
+            max_temp, min_temp, max_rain,
+            rain_probability, rain_hours,
+            max_humidity, max_wind,
+
+            fetched_at
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
         ON CONFLICT (cluster_key) DO UPDATE SET
-            temperature = EXCLUDED.temperature,
-            rainfall = EXCLUDED.rainfall,
-            humidity = EXCLUDED.humidity,
-            wind_speed = EXCLUDED.wind_speed,
+            max_temp = EXCLUDED.max_temp,
+            min_temp = EXCLUDED.min_temp,
+            max_rain = EXCLUDED.max_rain,
+            rain_probability = EXCLUDED.rain_probability,
+            rain_hours = EXCLUDED.rain_hours,
+            max_humidity = EXCLUDED.max_humidity,
+            max_wind = EXCLUDED.max_wind,
             fetched_at = NOW()
         """,
         (
             cluster["cluster_key"],
             cluster["latitude"],
             cluster["longitude"],
-            cluster["temperature"],
-            cluster["rainfall"],
-            cluster["humidity"],
-            cluster["wind_speed"],
+            cluster["max_temp"],
+            cluster["min_temp"],
+            cluster["max_rain"],
+            cluster["rain_probability"],
+            cluster["rain_hours"],
+            cluster["max_humidity"],
+            cluster["max_wind"],
         ),
     )
 
@@ -201,18 +228,26 @@ def insert_weather_history(connection, cluster: dict) -> None:
         """
         INSERT INTO weather_data (
             cluster_key, latitude, longitude,
-            temperature, rainfall, humidity, wind_speed, fetched_at
+
+            max_temp, min_temp, max_rain,
+            rain_probability, rain_hours,
+            max_humidity, max_wind,
+
+            fetched_at
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
         """,
         (
             cluster["cluster_key"],
             cluster["latitude"],
             cluster["longitude"],
-            cluster["temperature"],
-            cluster["rainfall"],
-            cluster["humidity"],
-            cluster["wind_speed"],
+            cluster["max_temp"],
+            cluster["min_temp"],
+            cluster["max_rain"],
+            cluster["rain_probability"],
+            cluster["rain_hours"],
+            cluster["max_humidity"],
+            cluster["max_wind"],
         ),
     )
 

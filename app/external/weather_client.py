@@ -25,9 +25,15 @@ def fetch_weather_raw(latitude: float, longitude: float) -> dict:
 
     api_key = get_weather_api_key()
 
-    url = "https://api.weatherapi.com/v1/current.json"
+    url = "https://api.weatherapi.com/v1/forecast.json"
 
-    params = {"key": api_key, "q": f"{latitude},{longitude}"}
+    params = {
+        "key": api_key,
+        "q": f"{latitude},{longitude}",
+        "days": 1,
+        "aqi": "no",
+        "alerts": "no",
+    }
 
     try:
         response = requests.get(url, params=params, timeout=10)

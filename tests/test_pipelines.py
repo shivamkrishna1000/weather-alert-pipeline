@@ -280,10 +280,13 @@ def test_weather_pipeline_fetch_and_store():
     clusters = [{"cluster_key": "A", "latitude": 1, "longitude": 2}]
 
     weather_data = {
-        "temperature": 30,
-        "humidity": 50,
-        "rainfall": 0,
-        "wind_speed": 10,
+        "max_temp": 30,
+        "min_temp": 20,
+        "max_rain": 0,
+        "rain_probability": 0,
+        "rain_hours": 0,
+        "max_humidity": 50,
+        "max_wind": 10,
     }
 
     with patch(

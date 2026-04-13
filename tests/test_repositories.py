@@ -228,15 +228,15 @@ def test_is_cache_fresh():
 def test_get_cached_weather():
 
     mock_cursor = MagicMock()
-    mock_cursor.fetchone.return_value = (25, 0, 60, 10, "time")
+    mock_cursor.fetchone.return_value = (30, 20, 5, 80, 3, 60, 15, "time")
 
     connection = MagicMock()
     connection.cursor.return_value = mock_cursor
 
     result = get_cached_weather(connection, "A")
 
-    assert result["temperature"] == 25
-    assert result["humidity"] == 60
+    assert result["max_temp"] == 30
+    assert result["rain_hours"] == 3
 
 
 def test_fetch_clusters():
@@ -261,10 +261,13 @@ def test_upsert_weather_cache():
         "cluster_key": "A",
         "latitude": 1,
         "longitude": 2,
-        "temperature": 30,
-        "rainfall": 0,
-        "humidity": 50,
-        "wind_speed": 10,
+        "max_temp": 30,
+        "min_temp": 20,
+        "max_rain": 5,
+        "rain_probability": 80,
+        "rain_hours": 3,
+        "max_humidity": 60,
+        "max_wind": 15,
     }
 
     upsert_weather_cache(connection, cluster)
@@ -281,10 +284,13 @@ def test_insert_weather_history():
         "cluster_key": "A",
         "latitude": 1,
         "longitude": 2,
-        "temperature": 30,
-        "rainfall": 0,
-        "humidity": 50,
-        "wind_speed": 10,
+        "max_temp": 30,
+        "min_temp": 20,
+        "max_rain": 5,
+        "rain_probability": 80,
+        "rain_hours": 3,
+        "max_humidity": 60,
+        "max_wind": 15,
     }
 
     insert_weather_history(connection, cluster)

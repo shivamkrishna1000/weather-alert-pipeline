@@ -81,10 +81,22 @@ def create_tables(connection) -> None:
             cluster_key TEXT PRIMARY KEY,
             latitude DOUBLE PRECISION,
             longitude DOUBLE PRECISION,
+
+            -- old fields
             temperature FLOAT,
             rainfall FLOAT,
             humidity FLOAT,
             wind_speed FLOAT,
+
+            -- new forecast features
+            max_temp FLOAT,
+            min_temp FLOAT,
+            max_rain FLOAT,
+            rain_probability FLOAT,
+            rain_hours INT,
+            max_humidity FLOAT,
+            max_wind FLOAT,
+
             fetched_at TIMESTAMP
         )
         """
@@ -97,10 +109,22 @@ def create_tables(connection) -> None:
             cluster_key TEXT,
             latitude DOUBLE PRECISION,
             longitude DOUBLE PRECISION,
+
+            -- old fields
             temperature FLOAT,
             rainfall FLOAT,
             humidity FLOAT,
             wind_speed FLOAT,
+
+            -- new forecast features
+            max_temp FLOAT,
+            min_temp FLOAT,
+            max_rain FLOAT,
+            rain_probability FLOAT,
+            rain_hours INT,
+            max_humidity FLOAT,
+            max_wind FLOAT,
+
             fetched_at TIMESTAMP
         )
         """

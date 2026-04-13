@@ -134,7 +134,10 @@ def test_fetch_all_greenhouse_data_empty_response(mock_sync, mock_token, mock_po
 def test_fetch_weather_success():
 
     mock_response = MagicMock()
-    mock_response.json.return_value = {"current": {"temp_c": 30}}
+    mock_response.json.return_value = {
+        "current": {"temp_c": 30},
+        "forecast": {"forecastday": [{"hour": []}]},
+    }
     mock_response.raise_for_status.return_value = None
 
     with patch(
