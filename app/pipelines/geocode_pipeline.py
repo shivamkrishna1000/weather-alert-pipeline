@@ -1,5 +1,6 @@
-import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from app.database import get_connection
 from app.external.maps_client import geocode_address
 from app.repositories.greenhouse_repo import (
     fetch_missing_batch,
@@ -12,14 +13,18 @@ from app.services.geocode_service import prepare_address, should_retry
 
 def insert_geocoded_record(connection, record: dict, lat: float, lon: float) -> None:
     """
-    Insert or update a geocoded greenhouse record in the database.
+    Insert or update a greenhouse record with geocoded coordinates.
+
+    Performs an upsert into the `greenhouses` table, updating latitude,
+    longitude, and marking the record as geocoded.
 
     Parameters
     ----------
     connection : Any
-        Database connection.
-    record : Dict
-        Greenhouse record.
+        Active database connection.
+    record : dict
+        Greenhouse record containing at least 'id', 'name',
+        'farmer_name', 'phone', and 'status'.
     lat : float
         Latitude value.
     lon : float
@@ -58,14 +63,14 @@ def insert_geocoded_record(connection, record: dict, lat: float, lon: float) -> 
 
 def delete_from_missing(connection, record_id: str) -> None:
     """
-    Remove a record from the missing location table.
+    Remove a record from the missing-location table after successful geocoding.
 
     Parameters
     ----------
     connection : Any
         Database connection.
     record_id : str
-        ID of the record to delete.
+        Unique identifier of the greenhouse record.
 
     Returns
     -------
@@ -82,28 +87,36 @@ def delete_from_missing(connection, record_id: str) -> None:
     cursor.close()
 
 
-def run_geocode_pipeline(connection, batch_size: int = 100) -> None:
+def run_geocode_pipeline(connection, database_url: str, batch_size: int = 100) -> None:
     """
     Execute geocoding pipeline for records missing location data.
 
-    Workflow:
-    - Fetch batch of records
-    - Build address
-    - Check retry eligibility
-    - Use cache or call API
-    - Store results
-    - Remove processed records
+    The pipeline processes records in batches:
+    - Fetch records with missing coordinates
+    - Build address strings
+    - Attempt geocoding (with retry limits)
+    - Use cache when available
+    - Persist successful results and remove processed records
+
+    Processing is performed in parallel using a thread pool.
 
     Parameters
     ----------
     connection : Any
         Database connection.
+    database_url : str
+        Database URL used to create independent connections for parallel workers.
     batch_size : int, optional
-        Number of records per batch.
+        Number of records to process per batch.
 
     Returns
     -------
     None
+
+    Raises
+    ------
+    RuntimeError
+        If a critical failure occurs during parallel execution.
     """
     total_processed = 0
 
@@ -116,35 +129,38 @@ def run_geocode_pipeline(connection, batch_size: int = 100) -> None:
 
         print(f"Processing batch of {len(records)} records...")
 
-        for record in records:
-            try:
-                processed = process_record(connection, record)
+        MAX_WORKERS = 5
 
-                if processed:
-                    total_processed += 1
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = [
+                executor.submit(process_record_parallel, record, database_url)
+                for record in records
+            ]
 
-                time.sleep(0.05)
+            for future in as_completed(futures):
+                try:
+                    processed = future.result()
 
-            except RuntimeError as e:
-                print(f"Critical failure for record {record.get('id')}: {e}")
-                raise
+                    if processed:
+                        total_processed += 1
+
+                except RuntimeError as e:
+                    print(f"Critical failure: {e}")
+                    raise
 
     print(f"Total processed: {total_processed}")
 
 
 def handle_failed_geocode(connection, record_id: str) -> None:
     """
-    Handle a failed geocoding attempt for a record.
-
-    This function updates retry attempt count for the record
-    to prevent infinite retries.
+    Increment retry attempt count for a failed geocoding record.
 
     Parameters
     ----------
     connection : Any
-        Database connection object.
+        Database connection.
     record_id : str
-        Unique identifier of the greenhouse record.
+        Record identifier.
 
     Returns
     -------
@@ -159,22 +175,31 @@ def get_coordinates(
     """
     Resolve geographic coordinates using cache or external API.
 
+    Workflow:
+    - Check local cache for existing coordinates
+    - If not found, call geocoding API
+    - Store successful results in cache
+
     Parameters
     ----------
     connection : Any
-        Database connection object.
+        Database connection.
     address : str
         Address string to geocode.
     record_id : str
-        Unique identifier of the greenhouse record.
+        Record identifier (used for logging and retry tracking).
 
     Returns
     -------
-    Dict[str, Any]
-        Dictionary containing:
-        - success : bool
-        - latitude : float (if success)
-        - longitude : float (if success)
+    tuple[float, float] or None
+        Latitude and longitude if successful.
+
+    Raises
+    ------
+    ValueError
+        If address is invalid.
+    RuntimeError
+        If API request fails.
     """
     cached = get_from_cache(connection, address)
 
@@ -200,25 +225,25 @@ def get_coordinates(
 
 def process_record(connection, record: dict) -> bool:
     """
-    Process a single greenhouse record through the geocoding workflow.
+    Process a single record through the geocoding workflow.
 
-    This function orchestrates the geocoding steps:
+    Steps:
     - Build address from record
-    - Validate retry eligibility
-    - Resolve coordinates (cache/API)
-    - Persist results and cleanup
+    - Check retry eligibility
+    - Resolve coordinates (cache or API)
+    - Persist results and clean up
 
     Parameters
     ----------
     connection : Any
-        Database connection object.
-    record : Dict
-        Greenhouse record containing address and metadata.
+        Database connection.
+    record : dict
+        Greenhouse record.
 
     Returns
     -------
     bool
-        True if record was successfully geocoded and stored, False otherwise.
+        True if successfully geocoded and stored, False otherwise.
     """
     try:
         record_id = record.get("id")
@@ -246,18 +271,48 @@ def process_record(connection, record: dict) -> bool:
         return False
 
 
+def process_record_parallel(record: dict, database_url: str) -> bool:
+    """
+    Execute record processing in isolation using a separate DB connection.
+
+    This function is designed for parallel execution and ensures each
+    worker manages its own database connection lifecycle.
+
+    Parameters
+    ----------
+    record : dict
+        Greenhouse record.
+    database_url : str
+        Database URL used to create a new connection.
+
+    Returns
+    -------
+    bool
+        Result of record processing.
+    """
+    connection = get_connection(database_url)
+
+    try:
+        result = process_record(connection, record)
+        return result
+
+    finally:
+        connection.close()
+
+
 def persist_geocoded_result(connection, record: dict, lat: float, lon: float) -> None:
     """
-    Persist geocoded coordinates and remove record from pending queue.
+    Store geocoded coordinates and remove record from pending queue.
 
-    This function inserts or updates the greenhouse record with
-    resolved coordinates and removes it from the missing location table.
+    This performs two operations:
+    - Upsert into `greenhouses` table
+    - Delete from `greenhouses_missing_location`
 
     Parameters
     ----------
     connection : Any
-        Database connection object.
-    record : Dict
+        Database connection.
+    record : dict
         Greenhouse record.
     lat : float
         Latitude value.

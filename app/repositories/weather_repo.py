@@ -2,34 +2,18 @@
 Database module for storing weather data.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
+
+from app.config import get_cluster_mode
+from app.services.cluster_service import build_cluster_key, build_distance_clusters
 
 
 # -------- CLUSTER FUNCTIONS --------
-def clean_name(name: str) -> str:
-    """
-    Normalize a location name by removing suffixes after '-'.
-
-    Parameters
-    ----------
-    name : str
-        Raw name string.
-
-    Returns
-    -------
-    str
-        Cleaned name.
-    """
-    if not name:
-        return ""
-    return name.split("-")[0].strip()
-
-
-def fetch_clusters(connection) -> list[dict]:
+def fetch_clusters(connection):
     """
     Fetch geographic clusters by aggregating greenhouse coordinates.
 
-    Clusters are grouped by district and taluk, with average
+    Clusters are grouped by district and taluk/village, with average
     latitude and longitude computed for each group.
 
     Returns
@@ -41,44 +25,44 @@ def fetch_clusters(connection) -> list[dict]:
 
     cursor.execute(
         """
-        SELECT
-            district,
-            taluk,
-            AVG(latitude) as latitude,
-            AVG(longitude) as longitude
+        SELECT district, taluk, village, latitude, longitude
         FROM greenhouses
-        WHERE latitude IS NOT NULL
-          AND longitude IS NOT NULL
-          AND district IS NOT NULL
-          AND taluk IS NOT NULL
-        GROUP BY district, taluk
-        """
+        WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+    """
     )
 
     rows = cursor.fetchall()
-    cursor.close()
 
-    clusters = []
+    columns = [col[0] for col in cursor.description]
+    records = [dict(zip(columns, row)) for row in rows]
 
-    for row in rows:
-        district, taluk, lat, lon = row
+    mode = get_cluster_mode()
 
-        clean_district = clean_name(district)
-        clean_taluk = clean_name(taluk)
+    # 🔹 DISTANCE MODE
+    if mode == "distance":
+        return build_distance_clusters(records)
 
-        cluster_key = f"{clean_district}_{clean_taluk}"
+    # 🔹 TALUK / VILLAGE MODE
+    clusters = {}
 
-        clusters.append(
-            {
-                "cluster_key": cluster_key,
-                "district": clean_district,
-                "taluk": clean_taluk,
-                "latitude": lat,
-                "longitude": lon,
-            }
-        )
+    for r in records:
+        key = build_cluster_key(r)
 
-    return clusters
+        if key not in clusters:
+            clusters[key] = {"latitude": [], "longitude": []}
+
+        clusters[key]["latitude"].append(r["latitude"])
+        clusters[key]["longitude"].append(r["longitude"])
+
+    final_clusters = []
+
+    for key, values in clusters.items():
+        lat = sum(values["latitude"]) / len(values["latitude"])
+        lon = sum(values["longitude"]) / len(values["longitude"])
+
+        final_clusters.append({"cluster_key": key, "latitude": lat, "longitude": lon})
+
+    return final_clusters
 
 
 # -------- CACHE FUNCTIONS --------
@@ -140,7 +124,7 @@ def get_cached_weather(connection, cluster_key: str) -> dict | None:
     }
 
 
-def is_cache_fresh(fetched_at, ttl_hours: int = 6) -> bool:
+def is_cache_fresh(fetched_at) -> bool:
     """
     Check if cached weather data is still valid.
 
@@ -155,10 +139,16 @@ def is_cache_fresh(fetched_at, ttl_hours: int = 6) -> bool:
     -------
     bool
     """
+    if not fetched_at:
+        return False
+
+    # Ensure timezone-aware
     if fetched_at.tzinfo is None:
         fetched_at = fetched_at.replace(tzinfo=UTC)
 
-    return datetime.now(UTC) - fetched_at < timedelta(hours=ttl_hours)
+    now = datetime.now(UTC)
+
+    return fetched_at.date() == now.date()
 
 
 # -------- WRITE FUNCTIONS --------

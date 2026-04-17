@@ -6,7 +6,19 @@ import psycopg2
 
 
 def get_connection(database_url: str):
-    """Create PostgreSQL connection (Neon)."""
+    """
+    Create a PostgreSQL database connection.
+
+    Parameters
+    ----------
+    database_url : str
+        Connection string for the PostgreSQL database.
+
+    Returns
+    -------
+    connection
+        Active database connection object.
+    """
     return psycopg2.connect(database_url)
 
 
@@ -14,7 +26,22 @@ def create_tables(connection) -> None:
     """
     Create required database tables if they do not exist.
 
-    This includes greenhouse, cache, metadata, and weather tables.
+    Tables created:
+    - greenhouses
+    - greenhouses_missing_location
+    - sync_metadata
+    - geocode_cache
+    - weather_cache
+    - weather_data
+
+    Parameters
+    ----------
+    connection : Any
+        Database connection.
+
+    Returns
+    -------
+    None
     """
     cursor = connection.cursor()
 
@@ -30,6 +57,7 @@ def create_tables(connection) -> None:
             longitude DOUBLE PRECISION,
             district TEXT,
             taluk TEXT,
+            village TEXT,
             status TEXT,
             geocoded BOOLEAN DEFAULT FALSE
         )
@@ -82,13 +110,6 @@ def create_tables(connection) -> None:
             latitude DOUBLE PRECISION,
             longitude DOUBLE PRECISION,
 
-            -- old fields
-            temperature FLOAT,
-            rainfall FLOAT,
-            humidity FLOAT,
-            wind_speed FLOAT,
-
-            -- new forecast features
             max_temp FLOAT,
             min_temp FLOAT,
             max_rain FLOAT,
@@ -110,13 +131,6 @@ def create_tables(connection) -> None:
             latitude DOUBLE PRECISION,
             longitude DOUBLE PRECISION,
 
-            -- old fields
-            temperature FLOAT,
-            rainfall FLOAT,
-            humidity FLOAT,
-            wind_speed FLOAT,
-
-            -- new forecast features
             max_temp FLOAT,
             min_temp FLOAT,
             max_rain FLOAT,
@@ -136,12 +150,20 @@ def create_tables(connection) -> None:
 
 def update_last_sync_time(connection, timestamp: str) -> None:
     """
-    Update the last synchronization timestamp.
+    Insert or update the last synchronization timestamp.
+
+    Performs an upsert into the `sync_metadata` table.
 
     Parameters
     ----------
+    connection : Any
+        Database connection.
     timestamp : str
         ISO formatted timestamp.
+
+    Returns
+    -------
+    None
     """
     cursor = connection.cursor()
 

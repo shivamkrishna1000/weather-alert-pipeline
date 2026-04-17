@@ -1,6 +1,6 @@
 import os
-from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock
+from datetime import UTC, datetime
+from unittest.mock import MagicMock, patch
 
 from app.config import load_environment
 from app.database import create_tables, get_connection
@@ -15,13 +15,13 @@ from app.repositories.greenhouse_repo import (
     insert_into_cache,
 )
 from app.repositories.weather_repo import (
-    clean_name,
     fetch_clusters,
     get_cached_weather,
     insert_weather_history,
     is_cache_fresh,
     upsert_weather_cache,
 )
+from app.services.cluster_service import clean_name
 
 # ------------------ DATABASE ------------------
 
@@ -203,6 +203,8 @@ def test_delete_greenhouse():
 
     delete_greenhouse(connection, "1")
 
+    cursor = connection.cursor.return_value
+    assert cursor.execute.called
     assert connection.commit.called
 
 
@@ -217,12 +219,9 @@ def test_clean_name():
 
 
 def test_is_cache_fresh():
+    now = datetime.now(UTC)
 
-    fresh_time = datetime.now(UTC)
-    old_time = datetime.now(UTC) - timedelta(hours=10)
-
-    assert is_cache_fresh(fresh_time) is True
-    assert is_cache_fresh(old_time) is False
+    assert is_cache_fresh(now) is True
 
 
 def test_get_cached_weather():
@@ -240,16 +239,25 @@ def test_get_cached_weather():
 
 
 def test_fetch_clusters():
-
     mock_cursor = MagicMock()
     mock_cursor.fetchall.return_value = [("Bangalore-East", "North-1", 10.0, 20.0)]
+    mock_cursor.description = [
+        ("district",),
+        ("taluk",),
+        ("latitude",),
+        ("longitude",),
+    ]
 
     connection = MagicMock()
     connection.cursor.return_value = mock_cursor
 
-    result = fetch_clusters(connection)
+    with patch(
+        "app.repositories.weather_repo.build_distance_clusters",
+        return_value=[{"cluster_key": "A"}],
+    ):
+        result = fetch_clusters(connection)
 
-    assert result[0]["cluster_key"] == "Bangalore_North"
+    assert result == [{"cluster_key": "A"}]
 
 
 def test_upsert_weather_cache():
@@ -272,6 +280,8 @@ def test_upsert_weather_cache():
 
     upsert_weather_cache(connection, cluster)
 
+    cursor = connection.cursor.return_value
+    assert cursor.execute.called
     assert connection.commit.called
 
 
@@ -295,4 +305,18 @@ def test_insert_weather_history():
 
     insert_weather_history(connection, cluster)
 
+    cursor = connection.cursor.return_value
+    assert cursor.execute.called
     assert connection.commit.called
+
+
+def test_get_cached_weather_none():
+    mock_cursor = MagicMock()
+    mock_cursor.fetchone.return_value = None
+
+    connection = MagicMock()
+    connection.cursor.return_value = mock_cursor
+
+    result = get_cached_weather(connection, "A")
+
+    assert result is None

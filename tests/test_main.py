@@ -30,7 +30,7 @@ def test_main_runs_successfully(
     mock_load_env.assert_called_once()
     mock_conn.assert_called_once_with("fake_db_url")
     mock_sync.assert_called_once_with(mock_connection)
-    mock_geocode.assert_called_once_with(mock_connection, batch_size=100)
+    mock_geocode.assert_called_once_with(mock_connection, "fake_db_url", batch_size=100)
     mock_weather.assert_called_once_with(mock_connection)
 
     # 🔴 missing earlier
@@ -66,9 +66,9 @@ def test_main_flow_calls(
 
     main()
 
-    assert mock_sync.called
-    assert mock_geocode.called
-    assert mock_weather.called
+    mock_sync.assert_called_once()
+    mock_geocode.assert_called_once()
+    mock_weather.assert_called_once()
 
 
 @patch("app.main.run_weather_pipeline")
@@ -93,7 +93,7 @@ def test_main_execution_order(
 
     expected_calls = [
         call(mock_connection),
-        call(mock_connection, batch_size=100),
+        call(mock_connection, "fake_db_url", batch_size=100),
         call(mock_connection),
     ]
 

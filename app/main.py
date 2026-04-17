@@ -11,12 +11,28 @@ from app.pipelines.weather_pipeline import run_weather_pipeline
 
 def main() -> None:
     """
-    Entry point for the full data pipeline.
+    Execute the full data processing pipeline.
 
-    Executes:
-    - Zoho sync
-    - Geocoding pipeline
-    - Weather pipeline
+    Pipeline stages:
+    1. Load environment variables
+    2. Establish database connection
+    3. Synchronize greenhouse data from Zoho
+    4. Geocode records missing location data
+    5. Fetch and store weather data for clusters
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    RuntimeError
+        If any pipeline stage fails critically.
+
+    Notes
+    -----
+    - Execution is sequential; later stages depend on earlier outputs.
+    - Database connection is closed at the end of execution.
     """
     load_environment()
 
@@ -36,7 +52,7 @@ def main() -> None:
 
         # Step 3: Run geocoding
         print("Starting geocoding pipeline...")
-        run_geocode_pipeline(connection, batch_size=100)
+        run_geocode_pipeline(connection, database_url, batch_size=100)
         print("Geocoding completed.")
 
         # Step 4: Run weather pipeline

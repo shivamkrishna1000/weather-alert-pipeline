@@ -14,13 +14,15 @@ def geocode_address(address: str) -> tuple[float, float]:
 
     Returns
     -------
-    Optional[Tuple[float, float]]
-        Tuple of (latitude, longitude) if successful, else None.
+    tuple[float, float]
+        Latitude and longitude of the resolved address.
 
     Raises
     ------
-    requests.exceptions.RequestException
-        If the API request fails due to network issues.
+    ValueError
+        If the API returns a non-success status (invalid address).
+    RuntimeError
+        If the API request fails or response is invalid.
     """
     api_key = get_google_maps_api_key()
 

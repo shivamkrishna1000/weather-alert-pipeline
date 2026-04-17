@@ -3,8 +3,10 @@ from unittest.mock import patch
 import pytest
 
 from app.config import (
+    get_cluster_mode,
     get_database_url,
     get_google_maps_api_key,
+    get_test_database_url,
     get_weather_api_key,
     get_zoho_accounts_url,
     get_zoho_api_base,
@@ -79,3 +81,14 @@ def test_get_weather_api_key_missing():
     with patch.dict("os.environ", {}, clear=True):
         with pytest.raises(ValueError):
             get_weather_api_key()
+
+
+def test_get_cluster_mode_invalid():
+    with patch.dict("os.environ", {"CLUSTER_MODE": "invalid"}):
+        with pytest.raises(ValueError):
+            get_cluster_mode()
+
+
+def test_get_test_database_url_success():
+    with patch.dict("os.environ", {"TEST_DATABASE_URL": "test_db"}):
+        assert get_test_database_url() == "test_db"

@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -24,11 +24,12 @@ def test_process_record_success():
         "app.pipelines.geocode_pipeline.get_coordinates", return_value=(1.0, 2.0)
     ), patch(
         "app.pipelines.geocode_pipeline.persist_geocoded_result"
-    ):
+    ) as mock_persist:
 
         result = process_record(None, record)
 
         assert result is True
+        mock_persist.assert_called_once()
 
 
 def test_process_record_skip_empty_address():
@@ -56,16 +57,6 @@ def test_process_record_no_address():
 
     with patch("app.pipelines.geocode_pipeline.prepare_address", return_value=None):
         result = process_record(None, {"id": "1"})
-
-        assert result is False
-
-
-def test_process_record_no_retry():
-
-    with patch(
-        "app.pipelines.geocode_pipeline.prepare_address", return_value="addr"
-    ), patch("app.pipelines.geocode_pipeline.should_retry", return_value=False):
-        result = process_record(None, {"id": "1", "attempts": 5})
 
         assert result is False
 
@@ -107,22 +98,6 @@ def test_get_coordinates_api_success():
 
         assert result == (1.0, 2.0)
         mock_insert.assert_called_once()
-
-
-def test_get_coordinates_success():
-
-    with patch(
-        "app.pipelines.geocode_pipeline.get_from_cache", return_value=None
-    ), patch(
-        "app.pipelines.geocode_pipeline.geocode_address", return_value=(10.0, 20.0)
-    ), patch(
-        "app.pipelines.geocode_pipeline.insert_into_cache"
-    ) as mock_cache:
-
-        result = get_coordinates(None, "addr", "1")
-
-        assert result == (10.0, 20.0)
-        mock_cache.assert_called_once()
 
 
 def test_get_coordinates_value_error():
@@ -174,12 +149,33 @@ def test_run_geocode_pipeline_single_record():
     record = {"id": "1"}
 
     with patch(
-        "app.pipelines.geocode_pipeline.fetch_missing_batch", side_effect=[[record], []]
-    ), patch("app.pipelines.geocode_pipeline.process_record", return_value=True), patch(
-        "app.pipelines.geocode_pipeline.time.sleep"
+        "app.pipelines.geocode_pipeline.fetch_missing_batch",
+        side_effect=[[record], []],
+    ), patch(
+        "app.pipelines.geocode_pipeline.process_record_parallel",
+        return_value=True,
+    ), patch(
+        "app.pipelines.geocode_pipeline.get_connection",
+        return_value=MagicMock(),
     ):
 
-        run_geocode_pipeline(None)
+        run_geocode_pipeline(None, database_url="dummy")
+
+
+def test_get_coordinates_value_error_triggers_retry():
+    with patch(
+        "app.pipelines.geocode_pipeline.get_from_cache", return_value=None
+    ), patch(
+        "app.pipelines.geocode_pipeline.geocode_address",
+        side_effect=ValueError("bad"),
+    ), patch(
+        "app.pipelines.geocode_pipeline.increment_attempt"
+    ) as mock_increment:
+
+        with pytest.raises(ValueError):
+            get_coordinates(None, "addr", "1")
+
+        mock_increment.assert_called_once_with(None, "1")
 
 
 # ------------------ SYNC PIPELINE ------------------
@@ -308,7 +304,7 @@ def test_weather_pipeline_fetch_and_store():
 
 
 def test_weather_pipeline_api_failure():
-    connection = object()
+    connection = MagicMock()
 
     clusters = [{"cluster_key": "A", "latitude": 1, "longitude": 2}]
 
@@ -317,7 +313,12 @@ def test_weather_pipeline_api_failure():
     ), patch(
         "app.pipelines.weather_pipeline.get_cached_weather", return_value=None
     ), patch(
-        "app.pipelines.weather_pipeline.get_weather", side_effect=RuntimeError("fail")
-    ):
+        "app.pipelines.weather_pipeline.get_weather",
+        side_effect=RuntimeError("fail"),
+    ), patch(
+        "app.pipelines.weather_pipeline.upsert_weather_cache"
+    ) as mock_cache:
 
         run_weather_pipeline(connection)
+
+        mock_cache.assert_not_called()

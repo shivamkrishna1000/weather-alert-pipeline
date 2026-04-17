@@ -110,7 +110,7 @@ def test_fetch_all_greenhouse_data_multiple_pages(mock_sync, mock_token, mock_po
 
     result = fetch_all_greenhouse_data(connection=None)
 
-    assert len(result) == 1
+    assert result == [{"id": "1"}]
 
 
 @patch("app.external.zoho_client.requests.post")

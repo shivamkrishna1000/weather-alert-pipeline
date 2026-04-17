@@ -5,33 +5,36 @@ from app.core.geocode import build_address
 
 def prepare_address(record: Dict) -> Optional[str]:
     """
-    Prepare address string from greenhouse record.
+    Construct a normalized address string from a greenhouse record.
+
+    This is a thin wrapper over `build_address` used to standardize
+    address preparation before geocoding.
 
     Parameters
     ----------
-    record : Dict
-        Greenhouse record.
+    record : dict
+        Greenhouse record containing address components.
 
     Returns
     -------
-    Optional[str]
-        Constructed address string or None.
+    str or None
+        Constructed address string, or None if insufficient data is present.
     """
     return build_address(record)
 
 
 def should_retry(attempts: int) -> bool:
     """
-    Determine whether geocoding should be retried for a record.
+    Determine if a record is eligible for another geocoding attempt.
 
     Parameters
     ----------
     attempts : int
-        Number of previous attempts.
+        Number of previous geocoding attempts.
 
     Returns
     -------
     bool
-        True if retry is allowed, False otherwise.
+        True if attempts are below retry limit (currently 3), else False.
     """
     return attempts < 3

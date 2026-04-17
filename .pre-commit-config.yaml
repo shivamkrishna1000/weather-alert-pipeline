@@ -20,3 +20,12 @@ repos:
     hooks:
       - id: end-of-file-fixer
       - id: trailing-whitespace
+
+  - repo: local
+    hooks:
+      - id: interrogate
+        name: interrogate (app only)
+        entry: interrogate -c pyproject.toml app
+        language: python
+        additional_dependencies: [interrogate]
+        pass_filenames: false

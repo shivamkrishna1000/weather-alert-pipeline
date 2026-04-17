@@ -6,20 +6,24 @@ def process_greenhouse_records(
     records: list[dict[str, object]],
 ) -> tuple[list[dict], list[dict]]:
     """
-    Process raw Zoho greenhouse records into cleaned datasets.
+    Process raw greenhouse records into cleaned datasets.
+
+    Workflow:
+    - Split records into those with and without location data
+    - Filter both groups based on allowed statuses
+    - Extract structured fields for records with valid location
 
     Parameters
     ----------
-    records : List[Dict[str, Any]]
+    records : list[dict]
         Raw greenhouse records from Zoho.
 
     Returns
     -------
-    Tuple[List[Dict], List[Dict]]
-        - Cleaned records with valid location
-        - Records missing location data
+    tuple[list[dict], list[dict]]
+        - Cleaned records with valid location (structured format)
+        - Records without location (filtered but not transformed)
     """
-
     with_loc, without_loc = split_records(records)
 
     with_loc = filter_greenhouses(
@@ -46,21 +50,24 @@ def filter_records_without_location(
     records: list[dict], allowed_statuses: set, fields: dict
 ) -> list[dict]:
     """
-    Filter greenhouse records without location based on allowed statuses.
+    Filter records without location based on allowed statuses.
+
+    This function prepares records for the geocoding pipeline
+    by retaining only those with valid operational status.
 
     Parameters
     ----------
-    records : List[Dict[str, Any]]
-        List of greenhouse records without coordinates.
+    records : list[dict]
+        Records missing latitude/longitude.
     allowed_statuses : set
-        Set of valid greenhouse statuses.
-    fields : Dict
-        Mapping of field names from Zoho schema.
+        Valid greenhouse statuses.
+    fields : dict
+        Mapping of field names.
 
     Returns
     -------
-    List[Dict[str, Any]]
-        Filtered records matching allowed statuses.
+    list[dict]
+        Filtered records eligible for geocoding.
     """
     filtered = []
 

@@ -66,6 +66,44 @@ def test_phone_fallback_priority():
     assert result[0]["phone"] == "888"
 
 
+def test_build_address_dedup_and_cleaning():
+    record = {
+        "village": "Chitawa-Chitawa",
+        "taluk": "Kuchaman, Kuchaman",
+        "district": "Nagaur",
+        "state": "Rajasthan",
+    }
+
+    result = build_address(record)
+
+    assert result == "Chitawa, Kuchaman, Nagaur, Rajasthan"
+
+
+def test_get_phone_priority_and_cleanup():
+    record = {
+        "Mobile": " 999  ",
+        "Farmer_Mobile_No": "888",
+        "Alternate_Number_1": "777",
+    }
+
+    result = extract_fields(
+        [
+            record
+            | {
+                "Name": "GH",
+                "Farmer": {"name": "Ravi"},
+                "Latitude": 1,
+                "Longitude": 2,
+                "Current_GH_Status": "active",
+                "id": "1",
+            }
+        ],
+        ZOHO_FIELDS,
+    )
+
+    assert result[0]["phone"] == "999"
+
+
 # ------------------ GEOCODE ------------------
 
 

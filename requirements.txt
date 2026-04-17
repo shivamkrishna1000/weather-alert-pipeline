@@ -6,3 +6,5 @@ psycopg2-binary
 coverage
 ruff
 pytest-cov
+scikit_learn
+numpy

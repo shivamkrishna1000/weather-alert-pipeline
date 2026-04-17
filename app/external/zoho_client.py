@@ -29,9 +29,20 @@ _expiry_time = 0
 
 def get_valid_access_token() -> str:
     """
-    Retrieve a valid Zoho access token.
+    Retrieve a valid Zoho OAuth access token.
 
-    Returns cached token if not expired, otherwise refreshes it.
+    Returns a cached token if it is still valid, otherwise refreshes
+    it using the refresh token flow.
+
+    Returns
+    -------
+    str
+        Valid access token.
+
+    Notes
+    -----
+    - Uses in-memory caching with expiry tracking.
+    - May trigger an API call if token is expired or missing.
     """
     global _access_token, _expiry_time
 
@@ -45,6 +56,8 @@ def refresh_access_token() -> str:
     """
     Refresh Zoho OAuth access token using refresh token.
 
+    Updates the in-memory cache with a new token and expiry time.
+
     Returns
     -------
     str
@@ -52,7 +65,7 @@ def refresh_access_token() -> str:
 
     Raises
     ------
-    requests.exceptions.RequestException
+    RuntimeError
         If token request fails.
     """
     global _access_token, _expiry_time
@@ -85,15 +98,15 @@ def refresh_access_token() -> str:
 
 def build_select_fields() -> str:
     """
-    Build COQL SELECT clause from ZOHO_FIELDS.
+    Construct COQL SELECT clause from configured field mappings.
 
-    Flattens field mappings, including nested lists, and ensures
-    required system fields are included.
+    Flattens field definitions (including nested lists), removes duplicates,
+    and ensures required system fields are included.
 
     Returns
     -------
     str
-        Comma-separated field names for COQL SELECT clause.
+        Comma-separated list of field names.
     """
     fields = []
 
@@ -113,18 +126,18 @@ def build_coql_query(
     module: str, where_clause: str, select_clause: str, limit: int, offset: int
 ) -> str:
     """
-    Construct COQL query string.
+    Construct a COQL query string with pagination.
 
     Parameters
     ----------
     module : str
-        Zoho module API name.
+        Zoho module name.
     where_clause : str
         Query filter conditions.
     select_clause : str
-        Comma-separated fields to retrieve.
+        Fields to retrieve.
     limit : int
-        Number of records per request.
+        Number of records per page.
     offset : int
         Pagination offset.
 
@@ -144,28 +157,30 @@ def build_coql_query(
 
 def execute_coql_query(base_url: str, headers: dict, query: str, offset: int) -> dict:
     """
-    Execute COQL query.
+    Execute a COQL query against Zoho CRM.
+
+    Handles API request execution, response validation, and error handling.
 
     Parameters
     ----------
     base_url : str
         Zoho API base URL.
     headers : dict
-        Request headers including authorization.
+        HTTP headers including authorization token.
     query : str
         COQL query string.
     offset : int
-        Pagination offset for error context.
+        Pagination offset (used for error context).
 
     Returns
     -------
     dict
-        JSON response from COQL API.
+        Parsed JSON response.
 
     Raises
     ------
     RuntimeError
-        If request fails or response is invalid.
+        If request fails, response is empty, or JSON is invalid.
     """
     payload = {"select_query": query}
 
@@ -203,15 +218,15 @@ def execute_coql_query(base_url: str, headers: dict, query: str, offset: int) ->
 
 def fetch_all_greenhouse_data(connection) -> list[dict]:
     """
-    Fetch greenhouse records from Zoho CRM using COQL.
+    Fetch greenhouse records from Zoho CRM using COQL with pagination.
 
-    Retrieves records with pagination, applies Modified_Time filter,
-    and aggregates results into a single list.
+    Retrieves records in batches, optionally filtered by last sync time,
+    and aggregates them into a single list.
 
     Parameters
     ----------
     connection : Any
-        Database connection used to fetch last sync time.
+        Database connection used to fetch last sync timestamp.
 
     Returns
     -------
@@ -221,7 +236,12 @@ def fetch_all_greenhouse_data(connection) -> list[dict]:
     Raises
     ------
     RuntimeError
-        If COQL API request fails.
+        If API request fails or response is invalid.
+
+    Notes
+    -----
+    - Uses Modified_Time filter for incremental sync.
+    - Stops when no more records are returned or pagination ends.
     """
     base_url = get_zoho_api_base()
     module = get_zoho_module()

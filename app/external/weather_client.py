@@ -5,7 +5,10 @@ from app.config import get_weather_api_key
 
 def fetch_weather_raw(latitude: float, longitude: float) -> dict:
     """
-    Fetch raw weather data from WeatherAPI.
+    Fetch raw weather forecast data from WeatherAPI.
+
+    Sends a request to the external WeatherAPI service and validates
+    the response structure.
 
     Parameters
     ----------
@@ -15,14 +18,13 @@ def fetch_weather_raw(latitude: float, longitude: float) -> dict:
     Returns
     -------
     dict
-        Raw JSON response from WeatherAPI
+        Raw JSON response containing forecast and current weather data.
 
     Raises
     ------
     RuntimeError
-        If API request fails
+        If API request fails, response is invalid, or required fields are missing.
     """
-
     api_key = get_weather_api_key()
 
     url = "https://api.weatherapi.com/v1/forecast.json"

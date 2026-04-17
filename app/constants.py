@@ -1,5 +1,9 @@
 """
-Central constants for Zoho field mappings.
+Central constants used across the application.
+
+Includes:
+- Field mappings for Zoho CRM data
+- Allowed greenhouse status values
 """
 
 ZOHO_FIELDS = {

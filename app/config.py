@@ -1,5 +1,8 @@
 """
-Configuration loader module.
+Configuration and environment variable access module.
+
+Provides helper functions to retrieve required configuration
+values for external services and application settings.
 """
 
 import os
@@ -81,3 +84,13 @@ def get_weather_api_key() -> str:
     if not key:
         raise ValueError("WEATHER_API_KEY is not set")
     return key
+
+
+def get_cluster_mode() -> str:
+    """Return Cluster Mode"""
+    val = os.environ.get("CLUSTER_MODE", "taluk").lower()
+
+    if val not in {"taluk", "village", "distance"}:
+        raise ValueError("Invalid CLUSTER_MODE")
+
+    return val
