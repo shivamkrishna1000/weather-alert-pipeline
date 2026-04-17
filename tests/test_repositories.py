@@ -240,10 +240,13 @@ def test_get_cached_weather():
 
 def test_fetch_clusters():
     mock_cursor = MagicMock()
-    mock_cursor.fetchall.return_value = [("Bangalore-East", "North-1", 10.0, 20.0)]
+    mock_cursor.fetchall.return_value = [
+        ("Bangalore-East", "North-1", "Village-1", 10.0, 20.0)
+    ]
     mock_cursor.description = [
         ("district",),
         ("taluk",),
+        ("village",),
         ("latitude",),
         ("longitude",),
     ]
@@ -252,6 +255,9 @@ def test_fetch_clusters():
     connection.cursor.return_value = mock_cursor
 
     with patch(
+        "app.repositories.weather_repo.get_cluster_mode",
+        return_value="distance",
+    ), patch(
         "app.repositories.weather_repo.build_distance_clusters",
         return_value=[{"cluster_key": "A"}],
     ):
