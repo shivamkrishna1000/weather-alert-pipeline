@@ -215,7 +215,7 @@ def test_clean_name():
 
     assert clean_name("Bangalore-East") == "Bangalore"
     assert clean_name("Delhi") == "Delhi"
-    assert clean_name(None) == ""
+    assert clean_name(None) == "None"
 
 
 def test_is_cache_fresh():
@@ -259,11 +259,24 @@ def test_fetch_clusters():
         return_value="distance",
     ), patch(
         "app.repositories.weather_repo.build_distance_clusters",
-        return_value=[{"cluster_key": "A"}],
+        return_value=[
+            {
+                "cluster_key": "A",
+                "latitude": 10.0,
+                "longitude": 20.0,
+                "members": [{"id": "1"}],
+            }
+        ],
     ):
         result = fetch_clusters(connection)
 
-    assert result == [{"cluster_key": "A"}]
+    assert result == [
+        {
+            "cluster_key": "A",
+            "latitude": 10.0,
+            "longitude": 20.0,
+        }
+    ]
 
 
 def test_upsert_weather_cache():
@@ -326,3 +339,84 @@ def test_get_cached_weather_none():
     result = get_cached_weather(connection, "A")
 
     assert result is None
+
+
+# ------------------ ADVISORY REPO ------------------
+
+
+def test_fetch_greenhouses_by_cluster():
+    mock_cursor = MagicMock()
+    mock_cursor.fetchall.return_value = [
+        ("1", "Ravi", "999"),
+        ("2", "Amit", "888"),
+    ]
+    mock_cursor.description = [
+        ("id",),
+        ("farmer_name",),
+        ("phone",),
+    ]
+
+    connection = MagicMock()
+    connection.cursor.return_value = mock_cursor
+
+    from app.repositories.advisory_repo import fetch_greenhouses_by_cluster
+
+    result = fetch_greenhouses_by_cluster(connection, "A")
+
+    assert result == [
+        {"id": "1", "farmer_name": "Ravi", "phone": "999"},
+        {"id": "2", "farmer_name": "Amit", "phone": "888"},
+    ]
+
+    mock_cursor.execute.assert_called_once()
+    mock_cursor.close.assert_called_once()
+
+
+def test_advisory_already_sent_true():
+    mock_cursor = MagicMock()
+    mock_cursor.fetchone.return_value = (1,)
+
+    connection = MagicMock()
+    connection.cursor.return_value = mock_cursor
+
+    from app.repositories.advisory_repo import advisory_already_sent
+
+    result = advisory_already_sent(connection, "1", "Rain alert")
+
+    assert result is True
+    mock_cursor.close.assert_called_once()
+
+
+def test_advisory_already_sent_false():
+    mock_cursor = MagicMock()
+    mock_cursor.fetchone.return_value = None
+
+    connection = MagicMock()
+    connection.cursor.return_value = mock_cursor
+
+    from app.repositories.advisory_repo import advisory_already_sent
+
+    result = advisory_already_sent(connection, "1", "Rain alert")
+
+    assert result is False
+
+
+def test_insert_advisory_log():
+    mock_cursor = MagicMock()
+
+    connection = MagicMock()
+    connection.cursor.return_value = mock_cursor
+
+    greenhouse = {
+        "id": "1",
+        "farmer_name": "Ravi",
+        "phone": "999",
+    }
+
+    from app.repositories.advisory_repo import insert_advisory_log
+
+    insert_advisory_log(connection, greenhouse, "A", "Rain alert")
+
+    assert mock_cursor.execute.called
+    assert connection.commit.called
+    mock_cursor.close.assert_called_once()

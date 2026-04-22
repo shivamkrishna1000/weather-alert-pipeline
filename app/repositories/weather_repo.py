@@ -11,58 +11,171 @@ from app.services.cluster_service import build_cluster_key, build_distance_clust
 # -------- CLUSTER FUNCTIONS --------
 def fetch_clusters(connection):
     """
-    Fetch geographic clusters by aggregating greenhouse coordinates.
+    Fetch and build clusters with cluster_key assignment.
 
-    Clusters are grouped by district and taluk/village, with average
-    latitude and longitude computed for each group.
+    Parameters
+    ----------
+    connection : Any
 
     Returns
     -------
-    list
-        List of cluster dictionaries.
+    list[dict]
+        Cluster summaries (without members)
+    """
+    records = fetch_greenhouse_records(connection)
+
+    if not records:
+        print("No greenhouse records found for clustering.")
+        return []
+
+    mode = get_cluster_mode()
+
+    # Distance mode
+    if mode == "distance":
+        clusters = build_distance_clusters(records)
+
+        assign_cluster_keys(connection, clusters)
+
+        return [
+            {
+                "cluster_key": c["cluster_key"],
+                "latitude": c["latitude"],
+                "longitude": c["longitude"],
+            }
+            for c in clusters
+        ]
+
+    # Taluk / Village mode
+    clusters = aggregate_clusters(records)
+
+    assign_cluster_keys(connection, clusters)
+
+    return [
+        {
+            "cluster_key": c["cluster_key"],
+            "latitude": c["latitude"],
+            "longitude": c["longitude"],
+        }
+        for c in clusters
+    ]
+
+
+def fetch_greenhouse_records(connection) -> list[dict]:
+    """
+    Fetch greenhouse records with valid coordinates.
+
+    Parameters
+    ----------
+    connection : Any
+
+    Returns
+    -------
+    list[dict]
+        Greenhouse records with id, district, taluk, village, latitude, longitude
     """
     cursor = connection.cursor()
 
     cursor.execute(
         """
-        SELECT district, taluk, village, latitude, longitude
+        SELECT id, district, taluk, village, latitude, longitude
         FROM greenhouses
         WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-    """
+        """
     )
 
     rows = cursor.fetchall()
-
     columns = [col[0] for col in cursor.description]
-    records = [dict(zip(columns, row)) for row in rows]
+    cursor.close()
 
-    mode = get_cluster_mode()
+    return [dict(zip(columns, row)) for row in rows]
 
-    # 🔹 DISTANCE MODE
-    if mode == "distance":
-        return build_distance_clusters(records)
 
-    # 🔹 TALUK / VILLAGE MODE
+def assign_cluster_keys(connection, clusters: list[dict]) -> None:
+    """
+    Update cluster_key for greenhouse records based on cluster membership.
+
+    Parameters
+    ----------
+    connection : Any
+        Database connection.
+    clusters : list[dict]
+        List of clusters containing cluster_key and members.
+
+    Returns
+    -------
+    None
+    """
+    cursor = connection.cursor()
+
+    updates = []
+
+    for cluster in clusters:
+        key = cluster["cluster_key"]
+
+        for member in cluster.get("members", []):
+            updates.append((key, member["id"]))
+
+    cursor.executemany(
+        """
+        UPDATE greenhouses
+        SET cluster_key = %s
+        WHERE id = %s
+        """,
+        updates,
+    )
+
+    connection.commit()
+    cursor.close()
+
+
+def aggregate_clusters(records: list[dict]) -> list[dict]:
+    """
+    Aggregate greenhouse records into clusters (taluk/village mode).
+
+    Parameters
+    ----------
+    records : list[dict]
+
+    Returns
+    -------
+    list[dict]
+        Clusters with members
+    """
     clusters = {}
 
     for r in records:
         key = build_cluster_key(r)
 
+        if not key:
+            continue
+
         if key not in clusters:
-            clusters[key] = {"latitude": [], "longitude": []}
+            clusters[key] = {
+                "latitude": [],
+                "longitude": [],
+                "members": [],
+            }
 
         clusters[key]["latitude"].append(r["latitude"])
         clusters[key]["longitude"].append(r["longitude"])
+        clusters[key]["members"].append(r)
 
-    final_clusters = []
+    result = []
 
     for key, values in clusters.items():
         lat = sum(values["latitude"]) / len(values["latitude"])
         lon = sum(values["longitude"]) / len(values["longitude"])
 
-        final_clusters.append({"cluster_key": key, "latitude": lat, "longitude": lon})
+        result.append(
+            {
+                "cluster_key": key,
+                "latitude": lat,
+                "longitude": lon,
+                "members": values["members"],
+            }
+        )
 
-    return final_clusters
+    return result
 
 
 # -------- CACHE FUNCTIONS --------

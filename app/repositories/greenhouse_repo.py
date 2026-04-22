@@ -29,16 +29,17 @@ def insert_greenhouses(connection, records: list[dict]) -> None:
             INSERT INTO greenhouses (id, name, farmer_name, phone, latitude, longitude, district, taluk, village, status, geocoded)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT(id) DO UPDATE SET
-                name=excluded.name,
-                farmer_name=excluded.farmer_name,
-                phone=excluded.phone,
-                latitude=excluded.latitude,
-                longitude=excluded.longitude,
-                district=excluded.district,
-                taluk=excluded.taluk,
-                village=excluded.village,
-                status=excluded.status,
-                geocoded=excluded.geocoded
+                name = COALESCE(excluded.name, greenhouses.name),
+                farmer_name = COALESCE(excluded.farmer_name, greenhouses.farmer_name),
+                phone = COALESCE(excluded.phone, greenhouses.phone),
+                latitude = COALESCE(excluded.latitude, greenhouses.latitude),
+                longitude = COALESCE(excluded.longitude, greenhouses.longitude),
+                district = COALESCE(excluded.district, greenhouses.district),
+                taluk = COALESCE(excluded.taluk, greenhouses.taluk),
+                village = COALESCE(excluded.village, greenhouses.village),
+                status = COALESCE(excluded.status, greenhouses.status),
+                geocoded = excluded.geocoded,
+                cluster_key = greenhouses.cluster_key
             """,
             (
                 r.get("id"),
@@ -320,4 +321,31 @@ def delete_greenhouse(connection, greenhouse_id: str) -> None:
     )
 
     connection.commit()
+    cursor.close()
+
+
+def update_cluster_key(connection, greenhouse_id: str, cluster_key: str) -> None:
+    """
+    Update cluster_key for a greenhouse.
+
+    Parameters
+    ----------
+    connection : Any
+        Database connection.
+    greenhouse_id : str
+        Greenhouse ID.
+    cluster_key : str
+        Assigned cluster key.
+    """
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        UPDATE greenhouses
+        SET cluster_key = %s
+        WHERE id = %s
+        """,
+        (cluster_key, greenhouse_id),
+    )
+
     cursor.close()

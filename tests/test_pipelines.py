@@ -271,7 +271,7 @@ def test_weather_pipeline_cache_hit():
 
 
 def test_weather_pipeline_fetch_and_store():
-    connection = object()
+    connection = MagicMock()
 
     clusters = [{"cluster_key": "A", "latitude": 1, "longitude": 2}]
 
@@ -292,6 +292,8 @@ def test_weather_pipeline_fetch_and_store():
     ), patch(
         "app.pipelines.weather_pipeline.get_weather", return_value=weather_data
     ), patch(
+        "app.pipelines.weather_pipeline.generate_and_store_advisories"
+    ) as mock_advisory, patch(
         "app.pipelines.weather_pipeline.upsert_weather_cache"
     ) as mock_cache, patch(
         "app.pipelines.weather_pipeline.insert_weather_history"
@@ -301,6 +303,7 @@ def test_weather_pipeline_fetch_and_store():
 
         mock_cache.assert_called_once()
         mock_history.assert_called_once()
+        mock_advisory.assert_called_once()
 
 
 def test_weather_pipeline_api_failure():

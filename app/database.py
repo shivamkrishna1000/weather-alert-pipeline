@@ -59,7 +59,8 @@ def create_tables(connection) -> None:
             taluk TEXT,
             village TEXT,
             status TEXT,
-            geocoded BOOLEAN DEFAULT FALSE
+            geocoded BOOLEAN DEFAULT FALSE,
+            cluster_key TEXT
         )
         """
     )
@@ -140,6 +141,29 @@ def create_tables(connection) -> None:
             max_wind FLOAT,
 
             fetched_at TIMESTAMP
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS advisory_logs (
+            id SERIAL PRIMARY KEY,
+
+            greenhouse_id TEXT,
+            farmer_name TEXT,
+            phone TEXT,
+
+            cluster_key TEXT,
+            advisory TEXT,
+
+            advisory_date DATE,
+
+            delivery_status TEXT,
+            sent_at TIMESTAMP DEFAULT NOW(),
+
+            CONSTRAINT unique_advisory_per_day
+            UNIQUE (greenhouse_id, advisory, advisory_date)
         )
         """
     )

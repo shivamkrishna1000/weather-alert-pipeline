@@ -24,7 +24,7 @@ def clean_name(name: str) -> str:
         Cleaned location name. Returns empty string if input is None or empty.
     """
     if not name:
-        return ""
+        return None
     return name.split("-")[0].strip()
 
 
@@ -55,9 +55,13 @@ def build_cluster_key(record: dict) -> str:
     village = clean_name(record.get("village"))
 
     if mode == "taluk":
+        if not (district and taluk):
+            return None
         return f"taluk_{district}_{taluk}"
 
     elif mode == "village":
+        if not (district and taluk and village):
+            return None
         return f"village_{district}_{taluk}_{village}"
 
     else:
@@ -86,6 +90,8 @@ def build_distance_clusters(records: list[dict], radius_km: float = 3.0):
         - latitude : float (cluster centroid)
         - longitude : float (cluster centroid)
     """
+    if not records:
+        return []
     coords = np.array([[r["latitude"], r["longitude"]] for r in records])
 
     coords_rad = np.radians(coords)
@@ -118,6 +124,7 @@ def build_distance_clusters(records: list[dict], radius_km: float = 3.0):
                 "cluster_key": f"distance_{lat_r}_{lon_r}",
                 "latitude": lat,
                 "longitude": lon,
+                "members": group,
             }
         )
 
