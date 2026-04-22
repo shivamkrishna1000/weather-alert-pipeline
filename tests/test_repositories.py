@@ -215,7 +215,7 @@ def test_clean_name():
 
     assert clean_name("Bangalore-East") == "Bangalore"
     assert clean_name("Delhi") == "Delhi"
-    assert clean_name(None) == "None"
+    assert clean_name(None) is None
 
 
 def test_is_cache_fresh():
