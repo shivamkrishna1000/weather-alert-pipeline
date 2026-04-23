@@ -37,7 +37,7 @@ def fetch_greenhouses_by_cluster(connection, cluster_key: str) -> list[dict]:
 
     cursor.execute(
         """
-        SELECT id, farmer_name, phone
+        SELECT id, name, farmer_name, phone
         FROM greenhouses
         WHERE cluster_key = %s
         """,
@@ -117,6 +117,7 @@ def insert_advisory_log(
         """
         INSERT INTO advisory_logs (
             greenhouse_id,
+            greenhouse_name,
             farmer_name,
             phone,
             cluster_key,
@@ -124,12 +125,13 @@ def insert_advisory_log(
             advisory_date,
             delivery_status
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (greenhouse_id, advisory, advisory_date)
         DO NOTHING
         """,
         (
             greenhouse["id"],
+            greenhouse["name"],
             greenhouse["farmer_name"],
             greenhouse["phone"],
             cluster_key,

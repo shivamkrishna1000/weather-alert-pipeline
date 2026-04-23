@@ -151,6 +151,8 @@ def create_tables(connection) -> None:
             id SERIAL PRIMARY KEY,
 
             greenhouse_id TEXT,
+            greenhouse_name TEXT,
+
             farmer_name TEXT,
             phone TEXT,
 

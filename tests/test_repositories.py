@@ -409,6 +409,7 @@ def test_insert_advisory_log():
 
     greenhouse = {
         "id": "1",
+        "name": "GH-3",
         "farmer_name": "Ravi",
         "phone": "999",
     }
