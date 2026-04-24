@@ -34,13 +34,12 @@ def fetch_clusters(connection):
     if mode == "distance":
         clusters = build_distance_clusters(records)
 
-        assign_cluster_keys(connection, clusters)
-
         return [
             {
                 "cluster_key": c["cluster_key"],
                 "latitude": c["latitude"],
                 "longitude": c["longitude"],
+                "members": c["members"],
             }
             for c in clusters
         ]
@@ -48,13 +47,12 @@ def fetch_clusters(connection):
     # Taluk / Village mode
     clusters = aggregate_clusters(records)
 
-    assign_cluster_keys(connection, clusters)
-
     return [
         {
             "cluster_key": c["cluster_key"],
             "latitude": c["latitude"],
             "longitude": c["longitude"],
+            "members": c["members"],
         }
         for c in clusters
     ]
@@ -77,7 +75,7 @@ def fetch_greenhouse_records(connection) -> list[dict]:
 
     cursor.execute(
         """
-        SELECT id, district, taluk, village, latitude, longitude
+        SELECT id, name, farmer_name, phone, district, taluk, village, latitude, longitude
         FROM greenhouses
         WHERE latitude IS NOT NULL AND longitude IS NOT NULL
         """
@@ -88,44 +86,6 @@ def fetch_greenhouse_records(connection) -> list[dict]:
     cursor.close()
 
     return [dict(zip(columns, row)) for row in rows]
-
-
-def assign_cluster_keys(connection, clusters: list[dict]) -> None:
-    """
-    Update cluster_key for greenhouse records based on cluster membership.
-
-    Parameters
-    ----------
-    connection : Any
-        Database connection.
-    clusters : list[dict]
-        List of clusters containing cluster_key and members.
-
-    Returns
-    -------
-    None
-    """
-    cursor = connection.cursor()
-
-    updates = []
-
-    for cluster in clusters:
-        key = cluster["cluster_key"]
-
-        for member in cluster.get("members", []):
-            updates.append((key, member["id"]))
-
-    cursor.executemany(
-        """
-        UPDATE greenhouses
-        SET cluster_key = %s
-        WHERE id = %s
-        """,
-        updates,
-    )
-
-    connection.commit()
-    cursor.close()
 
 
 def aggregate_clusters(records: list[dict]) -> list[dict]:

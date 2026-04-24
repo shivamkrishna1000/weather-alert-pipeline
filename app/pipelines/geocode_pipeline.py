@@ -129,7 +129,7 @@ def run_geocode_pipeline(connection, database_url: str, batch_size: int = 100) -
 
         print(f"Processing batch of {len(records)} records...")
 
-        MAX_WORKERS = 5
+        MAX_WORKERS = 20
 
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = [

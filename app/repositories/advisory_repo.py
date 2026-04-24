@@ -1,56 +1,6 @@
 from datetime import date
 
 
-def fetch_greenhouses_by_cluster(connection, cluster_key: str) -> list[dict]:
-    """
-    Fetch greenhouse records associated with a given cluster.
-
-    This function retrieves farmer-level greenhouse data using the
-    persisted `cluster_key` assigned during the clustering phase.
-    It supports all clustering modes (taluk, village, distance)
-    by relying on stored cluster membership rather than recomputing it.
-
-    Parameters
-    ----------
-    connection : Any
-        Active database connection.
-    cluster_key : str
-        Cluster identifier assigned to greenhouses.
-
-    Returns
-    -------
-    list[dict]
-        List of greenhouse records with keys:
-        - id : str
-        - farmer_name : str
-        - phone : str
-
-    Notes
-    -----
-    - Requires `cluster_key` to be populated in the `greenhouses` table.
-    - Cluster assignment must be completed before invoking this function.
-    - Works consistently across all clustering modes, including
-      distance-based clustering.
-    - Returns an empty list if no greenhouses are mapped to the cluster.
-    """
-    cursor = connection.cursor()
-
-    cursor.execute(
-        """
-        SELECT id, name, farmer_name, phone
-        FROM greenhouses
-        WHERE cluster_key = %s
-        """,
-        (cluster_key,),
-    )
-
-    columns = [col[0] for col in cursor.description]
-    rows = cursor.fetchall()
-    cursor.close()
-
-    return [dict(zip(columns, row)) for row in rows]
-
-
 def advisory_already_sent(connection, greenhouse_id: str, advisory: str) -> bool:
     """
     Check if an advisory has already been sent to a greenhouse today.
@@ -139,6 +89,86 @@ def insert_advisory_log(
             date.today(),
             "pending",
         ),
+    )
+
+    connection.commit()
+    cursor.close()
+
+
+def fetch_pending_advisories(connection) -> list[dict]:
+    """
+    Fetch all pending advisory logs for delivery.
+
+    Retrieves advisory records that have not yet been sent.
+    These records will be grouped and processed by the delivery pipeline.
+
+    Parameters
+    ----------
+    connection : Any
+        Database connection.
+
+    Returns
+    -------
+    list[dict]
+        List of advisory records with keys:
+        - id
+        - greenhouse_id
+        - greenhouse_name
+        - farmer_name
+        - phone
+        - advisory
+    """
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        SELECT
+            id,
+            greenhouse_id,
+            greenhouse_name,
+            farmer_name,
+            phone,
+            advisory
+        FROM advisory_logs
+        WHERE delivery_status = 'pending'
+        """
+    )
+
+    columns = [col[0] for col in cursor.description]
+    rows = cursor.fetchall()
+    cursor.close()
+
+    return [dict(zip(columns, row)) for row in rows]
+
+
+def mark_advisories_as_sent(connection, ids: list[int]) -> None:
+    """
+    Mark advisory logs as sent.
+
+    Parameters
+    ----------
+    connection : Any
+        Database connection.
+    ids : list[int]
+        List of advisory_log IDs to update.
+
+    Returns
+    -------
+    None
+    """
+    if not ids:
+        return
+
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        UPDATE advisory_logs
+        SET delivery_status = 'sent',
+            sent_at = NOW()
+        WHERE id = ANY(%s)
+        """,
+        (ids,),
     )
 
     connection.commit()

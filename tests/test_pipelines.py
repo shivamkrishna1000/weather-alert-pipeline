@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.constants import ALLOWED_STATUSES
+from app.pipelines.delivery_pipeline import run_delivery_pipeline
 from app.pipelines.geocode_pipeline import (
     get_coordinates,
     persist_geocoded_result,
@@ -249,7 +250,9 @@ def test_sync_pipeline_invalid_records_deleted(
 # ------------------ WEATHER PIPELINE ------------------
 
 
-def test_weather_pipeline_cache_hit():
+@patch("app.pipelines.weather_pipeline.get_connection", return_value=MagicMock())
+@patch("app.pipelines.weather_pipeline.get_database_url", return_value="dummy")
+def test_weather_pipeline_cache_hit(mock_db_url, mock_conn):
     connection = object()
 
     clusters = [{"cluster_key": "A", "latitude": 1, "longitude": 2}]
@@ -270,7 +273,9 @@ def test_weather_pipeline_cache_hit():
         mock_weather.assert_not_called()
 
 
-def test_weather_pipeline_fetch_and_store():
+@patch("app.pipelines.weather_pipeline.get_connection", return_value=MagicMock())
+@patch("app.pipelines.weather_pipeline.get_database_url", return_value="dummy")
+def test_weather_pipeline_fetch_and_store(mock_db_url, mock_conn):
     connection = MagicMock()
 
     clusters = [{"cluster_key": "A", "latitude": 1, "longitude": 2}]
@@ -306,7 +311,9 @@ def test_weather_pipeline_fetch_and_store():
         mock_advisory.assert_called_once()
 
 
-def test_weather_pipeline_api_failure():
+@patch("app.pipelines.weather_pipeline.get_connection", return_value=MagicMock())
+@patch("app.pipelines.weather_pipeline.get_database_url", return_value="dummy")
+def test_weather_pipeline_api_failure(mock_db_url, mock_conn):
     connection = MagicMock()
 
     clusters = [{"cluster_key": "A", "latitude": 1, "longitude": 2}]
@@ -325,3 +332,75 @@ def test_weather_pipeline_api_failure():
         run_weather_pipeline(connection)
 
         mock_cache.assert_not_called()
+
+
+# ------------------ WEATHER PIPELINE ------------------
+
+
+@patch("app.pipelines.delivery_pipeline.fetch_pending_advisories", return_value=[])
+def test_delivery_no_records(mock_fetch):
+    connection = MagicMock()
+
+    run_delivery_pipeline(connection)
+
+    mock_fetch.assert_called_once()
+
+
+@patch("app.pipelines.delivery_pipeline.mark_advisories_as_sent")
+@patch("app.pipelines.delivery_pipeline.send_whatsapp_message", return_value=True)
+@patch("app.pipelines.delivery_pipeline.format_greenhouse_message", return_value="msg")
+@patch("app.pipelines.delivery_pipeline.group_advisories_by_farmer")
+@patch("app.pipelines.delivery_pipeline.fetch_pending_advisories")
+def test_delivery_success(
+    mock_fetch,
+    mock_group,
+    mock_format,
+    mock_send,
+    mock_mark,
+):
+    connection = MagicMock()
+
+    mock_fetch.return_value = ["dummy"]
+
+    mock_group.return_value = {
+        "999": {
+            "farmer_name": "Ravi",
+            "greenhouses": {"GH1": ["Rain alert"]},
+            "ids": [1],
+        }
+    }
+
+    run_delivery_pipeline(connection)
+
+    mock_send.assert_called_once()
+    mock_mark.assert_called_once()
+
+
+@patch("app.pipelines.delivery_pipeline.mark_advisories_as_sent")
+@patch("app.pipelines.delivery_pipeline.send_whatsapp_message", return_value=False)
+@patch("app.pipelines.delivery_pipeline.format_greenhouse_message", return_value="msg")
+@patch("app.pipelines.delivery_pipeline.group_advisories_by_farmer")
+@patch("app.pipelines.delivery_pipeline.fetch_pending_advisories")
+def test_delivery_partial_failure(
+    mock_fetch,
+    mock_group,
+    mock_format,
+    mock_send,
+    mock_mark,
+):
+    connection = MagicMock()
+
+    mock_fetch.return_value = ["dummy"]
+
+    mock_group.return_value = {
+        "999": {
+            "farmer_name": "Ravi",
+            "greenhouses": {"GH1": ["Rain alert"]},
+            "ids": [1],
+        }
+    }
+
+    run_delivery_pipeline(connection)
+
+    mock_send.assert_called_once()
+    mock_mark.assert_not_called()

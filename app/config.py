@@ -89,8 +89,36 @@ def get_weather_api_key() -> str:
 def get_cluster_mode() -> str:
     """Return Cluster Mode"""
     val = os.environ.get("CLUSTER_MODE", "taluk").lower()
-
     if val not in {"taluk", "village", "distance"}:
         raise ValueError("Invalid CLUSTER_MODE")
-
     return val
+
+
+def get_wati_base_url() -> str:
+    """Return WATI base URL."""
+    val = os.environ.get("WATI_BASE_URL")
+    if not val:
+        raise ValueError("WATI_BASE_URL is not set")
+    return val
+
+
+def get_wati_api_token() -> str:
+    """Return WATI API token."""
+    val = os.environ.get("WATI_API_TOKEN")
+    if not val:
+        raise ValueError("WATI_API_TOKEN is not set")
+    return val
+
+
+def get_wati_template_name() -> str:
+    """Return WATI template name."""
+    val = os.environ.get("WATI_TEMPLATE_NAME")
+    if not val:
+        raise ValueError("WATI_TEMPLATE_NAME is not set")
+    return val
+
+
+def is_debug_mode() -> bool:
+    """Return debug mode flag."""
+    val = os.environ.get("DEBUG_MODE", "false").lower()
+    return val == "true"

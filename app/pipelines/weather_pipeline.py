@@ -1,8 +1,8 @@
-from app.repositories.advisory_repo import (
-    advisory_already_sent,
-    fetch_greenhouses_by_cluster,
-    insert_advisory_log,
-)
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from app.config import get_database_url
+from app.database import get_connection
+from app.repositories.advisory_repo import advisory_already_sent, insert_advisory_log
 from app.repositories.weather_repo import (
     fetch_clusters,
     get_cached_weather,
@@ -37,18 +37,30 @@ def run_weather_pipeline(connection) -> None:
     processed = 0
     skipped = 0
 
-    for cluster in clusters:
-        try:
-            result = process_cluster(connection, cluster)
+    MAX_WORKERS = 10
 
-            if result:
-                processed += 1
-            else:
-                skipped += 1
+    database_url = get_database_url()
 
-        except RuntimeError as e:
-            print(f"Weather API failure for {cluster['cluster_key']}: {e}")
-            continue
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {
+            executor.submit(process_cluster_parallel, cluster, database_url): cluster
+            for cluster in clusters
+        }
+
+        for future in as_completed(futures):
+            cluster = futures[future]
+
+            try:
+                result = future.result()
+
+                if result:
+                    processed += 1
+                else:
+                    skipped += 1
+
+            except RuntimeError as e:
+                print(f"Weather API failure for {cluster['cluster_key']}: {e}")
+                continue
 
     print(f"Processed: {processed}")
     print(f"Skipped (cache): {skipped}")
@@ -103,7 +115,7 @@ def fetch_and_prepare_weather(cluster: dict) -> dict:
 
 
 def generate_and_store_advisories(
-    connection, cluster_key: str, advisories: list[str]
+    connection, cluster: dict, advisories: list[str]
 ) -> None:
     """
     Generate and persist advisory logs for all greenhouses in a cluster.
@@ -118,7 +130,8 @@ def generate_and_store_advisories(
     -------
     None
     """
-    greenhouses = fetch_greenhouses_by_cluster(connection, cluster_key)
+    cluster_key = cluster["cluster_key"]
+    greenhouses = cluster["members"]
 
     for gh in greenhouses:
         for advisory in advisories:
@@ -168,10 +181,32 @@ def process_cluster(connection, cluster: dict) -> bool:
 
     generate_and_store_advisories(
         connection,
-        cluster_key,
+        cluster,
         enriched["advisories"],
     )
 
     update_weather_storage(connection, enriched)
 
     return True
+
+
+def process_cluster_parallel(cluster: dict, database_url: str) -> bool:
+    """
+    Wrapper for parallel execution of cluster processing.
+
+    Parameters
+    ----------
+    cluster : dict
+    connection : Any
+
+    Returns
+    -------
+    bool
+    """
+    connection = get_connection(database_url)
+
+    try:
+        result = process_cluster(connection, cluster)
+        return result
+    finally:
+        connection.close()

@@ -1,106 +1,110 @@
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.main import main
 
-
-@patch("app.main.run_weather_pipeline")
-@patch("app.main.run_geocode_pipeline")
-@patch("app.main.run_sync_pipeline")
-@patch("app.main.get_connection")
-@patch("app.main.load_environment")
-@patch("app.main.get_database_url")
-def test_main_runs_successfully(
-    mock_get_db_url,
-    mock_load_env,
-    mock_conn,
-    mock_sync,
-    mock_geocode,
-    mock_weather,
-):
-
-    mock_get_db_url.return_value = "fake_db_url"
-
-    mock_connection = MagicMock()
-    mock_conn.return_value = mock_connection
-
-    main()
-
-    mock_load_env.assert_called_once()
-    mock_conn.assert_called_once_with("fake_db_url")
-    mock_sync.assert_called_once_with(mock_connection)
-    mock_geocode.assert_called_once_with(mock_connection, "fake_db_url", batch_size=100)
-    mock_weather.assert_called_once_with(mock_connection)
-
-    # 🔴 missing earlier
-    mock_connection.close.assert_called_once()
+# ------------------ NO ARGUMENT ------------------
 
 
-@patch("app.main.load_environment")
-@patch("app.main.get_database_url", side_effect=ValueError("Missing DB URL"))
-def test_main_handles_db_error(mock_get_db_url, mock_load_env):
+def test_main_no_args(capsys):
+    with patch("app.main.load_environment"):
+        with patch("sys.argv", ["main.py"]):
+            main()
 
-    with pytest.raises(ValueError):
+    captured = capsys.readouterr()
+    assert "Usage" in captured.out
+
+
+# ------------------ INVALID MODE ------------------
+
+
+def test_main_invalid_mode(capsys):
+    with patch("app.main.load_environment"), patch(
+        "app.main.get_database_url", return_value="db"
+    ), patch("app.main.get_connection", return_value=MagicMock()), patch(
+        "sys.argv", ["main.py", "invalid"]
+    ):
+
         main()
 
+    captured = capsys.readouterr()
+    assert "Invalid mode" in captured.out
 
-@patch("app.main.run_weather_pipeline")
-@patch("app.main.run_geocode_pipeline")
-@patch("app.main.run_sync_pipeline")
+
+# ------------------ WEEKLY ------------------
+
+
+@patch("app.main.run_weekly_pipeline")
 @patch("app.main.get_connection")
+@patch("app.main.get_database_url", return_value="db")
 @patch("app.main.load_environment")
-@patch("app.main.get_database_url")
-def test_main_flow_calls(
-    mock_get_db_url,
-    mock_load_env,
-    mock_conn,
-    mock_sync,
-    mock_geocode,
-    mock_weather,
-):
+def test_main_weekly(mock_env, mock_db, mock_conn, mock_weekly):
+    connection = MagicMock()
+    mock_conn.return_value = connection
 
-    mock_get_db_url.return_value = "fake_db_url"
-    mock_connection = MagicMock()
-    mock_conn.return_value = mock_connection
+    with patch("sys.argv", ["main.py", "weekly"]):
+        main()
 
-    main()
-
-    mock_sync.assert_called_once()
-    mock_geocode.assert_called_once()
-    mock_weather.assert_called_once()
+    mock_weekly.assert_called_once_with(connection, "db")
+    connection.close.assert_called_once()
 
 
-@patch("app.main.run_weather_pipeline")
-@patch("app.main.run_geocode_pipeline")
-@patch("app.main.run_sync_pipeline")
+# ------------------ DAILY ------------------
+
+
+@patch("app.main.run_daily_pipeline")
 @patch("app.main.get_connection")
+@patch("app.main.get_database_url", return_value="db")
 @patch("app.main.load_environment")
-@patch("app.main.get_database_url")
-def test_main_execution_order(
-    mock_get_db_url,
-    mock_load_env,
-    mock_conn,
-    mock_sync,
-    mock_geocode,
-    mock_weather,
-):
+def test_main_daily(mock_env, mock_db, mock_conn, mock_daily):
+    connection = MagicMock()
+    mock_conn.return_value = connection
 
-    mock_get_db_url.return_value = "fake_db_url"
-    mock_connection = mock_conn.return_value
+    with patch("sys.argv", ["main.py", "daily"]):
+        main()
 
-    main()
+    mock_daily.assert_called_once_with(connection)
+    connection.close.assert_called_once()
 
-    expected_calls = [
-        call(mock_connection),
-        call(mock_connection, "fake_db_url", batch_size=100),
-        call(mock_connection),
-    ]
 
-    actual_calls = [
-        mock_sync.call_args,
-        mock_geocode.call_args,
-        mock_weather.call_args,
-    ]
+# ------------------ DB URL FAILURE ------------------
 
-    assert actual_calls == expected_calls
+
+@patch("app.main.get_database_url", side_effect=ValueError("fail"))
+@patch("app.main.load_environment")
+def test_main_db_url_failure(mock_env, mock_db):
+    with patch("sys.argv", ["main.py", "weekly"]):
+        with pytest.raises(ValueError):
+            main()
+
+
+# ------------------ CONNECTION FAILURE ------------------
+
+
+@patch("app.main.get_connection", side_effect=RuntimeError("fail"))
+@patch("app.main.get_database_url", return_value="db")
+@patch("app.main.load_environment")
+def test_main_connection_failure(mock_env, mock_db, mock_conn):
+    with patch("sys.argv", ["main.py", "weekly"]):
+        with pytest.raises(RuntimeError):
+            main()
+
+
+# ------------------ PIPELINE FAILURE ------------------
+
+
+@patch("app.main.run_daily_pipeline", side_effect=RuntimeError("fail"))
+@patch("app.main.get_connection")
+@patch("app.main.get_database_url", return_value="db")
+@patch("app.main.load_environment")
+def test_main_pipeline_failure(mock_env, mock_db, mock_conn, mock_pipeline):
+    connection = MagicMock()
+    mock_conn.return_value = connection
+
+    with patch("sys.argv", ["main.py", "daily"]):
+        with pytest.raises(RuntimeError):
+            main()
+
+    # IMPORTANT: finally block
+    connection.close.assert_called_once()

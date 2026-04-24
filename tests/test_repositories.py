@@ -275,6 +275,7 @@ def test_fetch_clusters():
             "cluster_key": "A",
             "latitude": 10.0,
             "longitude": 20.0,
+            "members": [{"id": "1"}],
         }
     ]
 
@@ -342,34 +343,6 @@ def test_get_cached_weather_none():
 
 
 # ------------------ ADVISORY REPO ------------------
-
-
-def test_fetch_greenhouses_by_cluster():
-    mock_cursor = MagicMock()
-    mock_cursor.fetchall.return_value = [
-        ("1", "Ravi", "999"),
-        ("2", "Amit", "888"),
-    ]
-    mock_cursor.description = [
-        ("id",),
-        ("farmer_name",),
-        ("phone",),
-    ]
-
-    connection = MagicMock()
-    connection.cursor.return_value = mock_cursor
-
-    from app.repositories.advisory_repo import fetch_greenhouses_by_cluster
-
-    result = fetch_greenhouses_by_cluster(connection, "A")
-
-    assert result == [
-        {"id": "1", "farmer_name": "Ravi", "phone": "999"},
-        {"id": "2", "farmer_name": "Amit", "phone": "888"},
-    ]
-
-    mock_cursor.execute.assert_called_once()
-    mock_cursor.close.assert_called_once()
 
 
 def test_advisory_already_sent_true():
